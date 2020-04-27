@@ -17,7 +17,7 @@ class TeeIo(object):
     """
 
     def __init__(self, file, stream=sys.stderr):
-        self.file = open(file, 'w')
+        self.file = open(file, 'w', buffering=1)
         self.stream = stream
         # self.stdout = sys.stdout
         # sys.stdout = self

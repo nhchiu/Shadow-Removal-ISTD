@@ -13,11 +13,13 @@ from matplotlib import pyplot as plt
 from torchvision import transforms, utils
 from tqdm.auto import tqdm
 
+import utils
+
 
 class MyDataset(torch.utils.data.Dataset):
     """Shadow removal dataset based on ISTD dataset."""
-    in_channels = 3
-    out_channels = 6
+    in_channels: int = 3
+    out_channels: int = 3
 
     def __init__(self,
                  root_dir,
@@ -42,13 +44,15 @@ class MyDataset(torch.utils.data.Dataset):
         self.img_dir = os.path.join(
             root_dir, subset, subset + "_C_fixed_official")
         # list all images and targets,
-        # sorting them after removing the suffix to ensure that they are aligned
+        # sorting them without the suffix to ensure that they are aligned
         self.inputs = sorted(os.listdir(self.input_dir),
-                             key=lambda f: '.'.join(f.split('.')[0:-1]))
+                             key=lambda f: os.path.splitext(f)[0])
         self.sps = sorted(os.listdir(self.sp_dir),
-                          key=lambda f: '.'.join(f.split('.')[0:-1]))
+                          key=lambda f: os.path.splitext(f)[0])
         self.imgs = sorted(os.listdir(self.img_dir),
-                           key=lambda f: '.'.join(f.split('.')[0:-1]))
+                           key=lambda f: os.path.splitext(f)[0])
+        assert(len(self.inputs) == len((self.sps)))
+        assert(len(self.inputs) == len((self.imgs)))
         # print("[Mydataset] Done creating {} dataset".format(subset))
 
     def __getitem__(self, idx):
@@ -58,14 +62,14 @@ class MyDataset(torch.utils.data.Dataset):
         # read images and npy
         img_in = cv.imread(os.path.join(
             self.input_dir, self.inputs[idx]), cv.IMREAD_COLOR)
-        img_in = img_in.astype(np.float32)/255.0
-        sp = np.load(os.path.join(
-            self.sp_dir, self.sps[idx])).astype(np.float32)
-        sp[..., 0] = sp[..., 0]/100.0
-        sp = sp.reshape((sp.shape[0], sp.shape[1], -1))
+        img_in = utils.uint2float(img_in)
+
         img_target = cv.imread(os.path.join(
             self.img_dir, self.imgs[idx]), cv.IMREAD_COLOR)
-        img_target = img_target.astype(np.float32)/255.0
+        img_target = utils.uint2float(img_target)
+
+        sp = np.load(os.path.join(
+            self.sp_dir, self.sps[idx])).astype(np.float32)
 
         if self.transforms is not None:
             img_in, sp, img_target = self.transforms((img_in, sp, img_target))
@@ -73,11 +77,13 @@ class MyDataset(torch.utils.data.Dataset):
         # ndarray(H, W, C) to tensor(C, H, W)
         img_in_tensor = torch.as_tensor(
             img_in.transpose(2, 0, 1), dtype=torch.float32)
-        sp_tensor = torch.as_tensor(sp.transpose(2, 0, 1), dtype=torch.float32)
         img_target_tensor = torch.as_tensor(
             img_target.transpose(2, 0, 1), dtype=torch.float32)
+        sp_tensor = torch.as_tensor(sp.transpose(2, 0, 1), dtype=torch.float32)
 
-        return (img_in_tensor, {"image": img_target_tensor, "sp": sp_tensor})
+        filename = os.path.splitext(self.inputs[idx])[0]
+
+        return (img_in_tensor, {"image": img_target_tensor, "sp": sp_tensor}, filename)
 
     def __len__(self):
         return len(self.inputs)

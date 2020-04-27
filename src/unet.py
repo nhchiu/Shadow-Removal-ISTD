@@ -18,11 +18,15 @@ from collections import OrderedDict
 
 import torch
 import torch.nn as nn
+from mydataset import MyDataset
 
 
 class UNet(nn.Module):
 
-    def __init__(self, in_channels=3, out_channels=6, in_features=64):
+    def __init__(self,
+    in_channels=MyDataset.in_channels,
+    out_channels=MyDataset.out_channels,
+    in_features=64):
         super(UNet, self).__init__()
 
         features = in_features
