@@ -62,23 +62,23 @@ class MyDataset(torch.utils.data.Dataset):
         # read images and npy
         img_in = cv.imread(os.path.join(
             self.input_dir, self.inputs[idx]), cv.IMREAD_COLOR)
-        img_in = utils.uint2float(img_in)
-
+        # img_in = utils.uint2float(img_in)
         img_target = cv.imread(os.path.join(
             self.img_dir, self.imgs[idx]), cv.IMREAD_COLOR)
-        img_target = utils.uint2float(img_target)
-
+        # img_target = utils.uint2float(img_target)
         sp = np.load(os.path.join(
             self.sp_dir, self.sps[idx])).astype(np.float32)
 
         if self.transforms is not None:
             img_in, sp, img_target = self.transforms((img_in, sp, img_target))
 
+        img_transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
+        ])
         # ndarray(H, W, C) to tensor(C, H, W)
-        img_in_tensor = torch.as_tensor(
-            img_in.transpose(2, 0, 1), dtype=torch.float32)
-        img_target_tensor = torch.as_tensor(
-            img_target.transpose(2, 0, 1), dtype=torch.float32)
+        img_in_tensor = img_transform(img_in)
+        img_target_tensor = img_transform(img_target)
         sp_tensor = torch.as_tensor(sp.transpose(2, 0, 1), dtype=torch.float32)
 
         filename = os.path.splitext(self.inputs[idx])[0]

@@ -4,19 +4,18 @@
 Custom lost functions
 """
 
-import math
+from collections import OrderedDict
 
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
-
-import utils
 
 
 class DataLoss(nn.Module):
     """
     Loss between shadow parameters
     """
+    __slots__ = ["reduction", "norm"]
 
     def __init__(self, norm=F.smooth_l1_loss, reduction: str = 'mean'):
         super().__init__()
@@ -31,6 +30,7 @@ class VisualLoss(nn.Module):
     """
     Loss between predicted image and target image
     """
+    __slots__ = ["reduction", "norm"]
 
     def __init__(self, norm=F.smooth_l1_loss, reduction: str = 'mean'):
         super().__init__()
@@ -48,7 +48,7 @@ class VisualLoss(nn.Module):
 class AdversarialLoss(nn.Module):
     """
     Objective of a conditional GAN:
-    E_(x,y){[log(D(x, y)]} + E_(x,z){[log(1 − D(x, G(x, z))}
+    E_(x,y){[log(D(x, y)]} + E_(x,z){[log(1-D(x, G(x, z))}
 
     The BCEWithLogitsLoss combines a Sigmoid layer and the BCELoss in one single class
     """
@@ -64,5 +64,69 @@ class AdversarialLoss(nn.Module):
         return F.binary_cross_entropy_with_logits(D_out, target)
 
 
+class SoftAdapt(nn.Module):
+    __slots__ = ["losses", "loss_tensor", "prev_losses", "differences",
+                 "weights", "alpha", "beta", "epsilon",
+                 "weighted", "normalized"]
 
+    def __init__(self, keys: list,
+                 beta=0.1,
+                 epsilon=1e-8,
+                 weighted=True,
+                 normalized=True):
+        self.losses = OrderedDict.fromkeys(keys, torch.tensor([0.0]))
+        self.loss_tensor = torch.zeros(len(keys))
+        self.prev_losses = torch.zeros(len(keys))
+        self.differences = torch.zeros(len(keys))
+        self.weights = torch.ones(len(keys)) / len(keys)
+        self.beta: float = beta
+        self.epsilon: float = epsilon
+        self.weighted: bool = weighted
+        self.normalized: bool = normalized
+        self.alpha: float = 0.7  # smoothing factor
 
+    def _loss_tensor(self):
+        return torch.stack(tuple(self.losses.values()), dim=0)
+
+    def update(self, losses: dict):
+        self.losses.update(losses)
+
+    def update_loss(self, loss: str, data: torch.Tensor):
+        self.losses[loss] = data
+
+    @torch.no_grad()
+    def update_weights(self,):
+        # Update gradient and average of previous losses
+        self.loss_tensor = self._loss_tensor()
+        with torch.no_grad():
+            loss_detached = self.loss_tensor.detach()
+            self.differences = self.alpha * self.differences + \
+                (1-self.alpha) * (loss_detached-self.prev_losses)
+            self.prev_losses = self.alpha * self.prev_losses + \
+                (1-self.alpha) * loss_detached
+            # Updated weights
+            grad = self.differences
+            if self.normalized:
+                grad /= torch.clamp(grad.abs().sum(), min=self.epsilon)
+            self.weights = F.softmax(grad, dim=0)
+            if self.weighted:
+                self.weights *= self.prev_losses
+                self.weights /= torch.clamp(self.weights.sum(),
+                                            min=self.epsilon)
+
+    def forward(self, losses, update_weights=False):
+        self.update(losses)
+        if update_weights:
+            self.update_weights()
+        return torch.sum(self.loss_tensor * self.weights)
+
+    def get_loss(self, key):
+        return self.losses[key].item()
+
+    def get_weights(self,):
+        return dict(self.losses.keys(), self.weights.tolist())
+
+    # def to(self, device):
+    #     self.prev_losses = self.prev_losses.to(device)
+    #     self.differences = self.differences.to(device)
+    #     self.weights = self.weights.to(device)

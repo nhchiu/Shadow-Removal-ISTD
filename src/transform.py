@@ -2,17 +2,19 @@ import numbers
 
 import cv2 as cv
 import numpy as np
-from torchvision.transforms import Compose
+# from torchvision.transforms import Compose
 
 
-def transforms(
-        scale=None,
-        angle=None,
-        flip_prob=None,
-        crop_size=None
-):
+def transforms(resize=None,
+               scale=None,
+               angle=None,
+               flip_prob=None,
+               crop_size=None
+               ):
     transform_list = []
 
+    if resize is not None:
+        transform_list.append(Resize(resize))
     if scale is not None:
         transform_list.append(RandomScale(scale))
     if angle is not None:
@@ -23,6 +25,16 @@ def transforms(
         transform_list.append(RandomCrop(crop_size))
 
     return Compose(transform_list)
+
+
+class Compose(object):
+    def __init__(self, transforms: list):
+        self.transforms = transforms
+
+    def __call__(self, sample: tuple):
+        for transform in self.transforms:
+            sample = transform(sample)
+        return sample
 
 
 class RandomScale(object):
@@ -143,6 +155,7 @@ class Resize(object):
         else:
             interp = cv.INTER_LINEAR
         output = [
-            cv.resize(i, (self.size[1], self.size[0]), interpolation=interp) for i in sample
+            cv.resize(i, (self.size[1], self.size[0]), interpolation=interp)
+            for i in sample
         ]
         return tuple(output)

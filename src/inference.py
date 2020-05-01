@@ -63,6 +63,7 @@ def main(args):
                               for s in range(y_pred_np.shape[0])])
 
             x_np = x.detach().cpu().numpy()
+            x_np = (x_np * 0.5)+0.5
             input_list.extend([x_np[s].transpose(1, 2, 0)
                                for s in range(x_np.shape[0])])
 

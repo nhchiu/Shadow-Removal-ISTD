@@ -14,11 +14,8 @@ https://github.com/mateuszbuda/brain-segmentation-pytorch
 }
 """
 
-from collections import OrderedDict
-
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from mydataset import MyDataset
 
@@ -28,7 +25,7 @@ class DenseUNet(nn.Module):
     def __init__(self,
                  in_channels=MyDataset.in_channels,
                  out_channels=MyDataset.out_channels,
-                 features=32,
+                 features=48,
                  drop_rate=0.01):
         super(DenseUNet, self).__init__()
         depth = 5
@@ -37,9 +34,9 @@ class DenseUNet(nn.Module):
 
         self.in_conv = nn.Conv2d(in_channels=in_channels,
                                  out_channels=features,
-                                 kernel_size=1,
+                                 kernel_size=3,
                                  stride=1,
-                                 padding=0,
+                                 padding=1,
                                  bias=False)
 
         self.DenseBlockEncoders = nn.ModuleDict([

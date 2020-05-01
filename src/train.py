@@ -6,24 +6,20 @@ import datetime
 import json
 import logging
 import os
-import sys
 import time
 import random
 
-import cv2 as cv
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data
-from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from tqdm import tqdm, trange
 
 from denseunet import DenseUNet
 from logger import Logger
-from loss import DataLoss, VisualLoss, AdversarialLoss
+from loss import DataLoss, VisualLoss, AdversarialLoss, SoftAdapt
 from mydataset import MyDataset
 from transform import transforms
 from unet import UNet
@@ -32,8 +28,9 @@ from discriminator import Discriminator
 
 
 def main(args):
+    time_str = time.strftime("%Y%m%d-%H%M%S")
     makedirs(args)
-    snapshotargs(args)
+    snapshotargs(args, filename=f"args-{time_str}.json")
 
     # use CuDNN backend
     torch.backends.cudnn.benchmark = True
@@ -45,10 +42,12 @@ def main(args):
     torch.manual_seed(manual_seed)
     torch.cuda.manual_seed_all(manual_seed)
 
-    log_file = os.path.join(args.logs, os.path.splitext(__file__)[0]+".log")
+    log_file = os.path.join(args.logs,
+                            os.path.splitext(__file__)[0]+"-"+time_str+".log")
     logger = Logger(log_file, level=logging.DEBUG)
 
-    run_dir = os.path.join(args.logs, os.path.splitext(__file__)[0]+"-run")
+    run_dir = os.path.join(
+        args.logs, os.path.splitext(__file__)[0]+"-"+time_str)
     if (os.path.exists(run_dir) and os.path.isdir(run_dir)):
         for file in os.listdir(run_dir):
             os.remove(os.path.join(run_dir, file))
@@ -79,7 +78,7 @@ def main(args):
     network = network_choices.get(args.net, DenseUNet)
     generator = network(in_channels=MyDataset.in_channels,
                         out_channels=MyDataset.out_channels,
-                        drop_rate=0.001)
+                        drop_rate=0)
     writer.add_graph(generator, dummy_input)
     if args.load_weights_g != "":
         state_dict = torch.load(args.load_weights_g, map_location=device)
@@ -100,16 +99,14 @@ def main(args):
         discriminator.apply(weights_init)
     discriminator.to(device)
 
-    loss_weights = {
-        'vis': args.visual_weight,
-        'data': args.data_weight,
-        'GAN': args.gan_weight
-    }
-    loss_fns = {
-        'data': DataLoss().to(device),
-        'vis': VisualLoss().to(device),
-        'GAN': AdversarialLoss().to(device)
-    }
+    data_loss = DataLoss().to(device)
+    # visual_loss = VisualLoss().to(device)
+    gan_loss = AdversarialLoss().to(device)
+    soft_adapt = SoftAdapt(["data", "GAN"],
+                           beta=0.1,
+                           weighted=True,
+                           normalized=False)
+    soft_adapt.to(device)
     best_validation_loss = 1000.0
 
     optimizer_G = optim.Adam(generator.parameters(),
@@ -138,87 +135,70 @@ def main(args):
             progress.set_description(phase)
 
             loss_sum = {
-                "total": 0,
                 "D": 0,
                 "G": 0,
                 "G_gan": 0,
                 "G_data": 0,
-                "G_vis": 0
+                # "G_vis": 0
             }
             D_real = []
             D_fake = []
             for batch, (x, y_true, _) in enumerate(loaders[phase]):
                 progress.set_description(phase + f" batch {batch:<2d}")
 
-                chunks = len(x) // args.mini_batch
-                x_chunks = x.chunk(chunks)
-                y_true_img_chunks = y_true["image"].chunk(chunks)
-                y_true_sp_shunks = y_true["sp"].chunk(chunks)
+                x = x.to(device)
+                y_true_img = y_true["image"].to(device)
+                y_true_sp = y_true["sp"].to(device)
 
                 optimizer_D.zero_grad()
                 optimizer_G.zero_grad()
 
                 with torch.set_grad_enabled(phase == "train"):
                     discriminator.zero_grad()
-                    for (x, _, y_true_sp) in zip(x_chunks, y_true_img_chunks, y_true_sp_shunks):
-                        x = x.to(device)
-                        y_true_sp = y_true_sp.to(device)
+                    discriminator.requires_grad_(True)
+                    # Train discriminator with real y_true_sp
+                    D_out_real = discriminator(x, y_true_sp)
+                    D_loss_real = gan_loss(D_out_real, is_real=True)
+                    D_real.append(
+                        np.mean(D_out_real.detach().cpu().numpy()))
+                    # Train discriminator with generated y_pred
+                    y_pred = generator(x)
+                    D_out_fake = discriminator(x, y_pred.detach())
+                    D_loss_fake = gan_loss(D_out_fake, is_real=False)
+                    D_fake.append(
+                        np.mean(D_out_fake.detach().cpu().numpy()))
 
-                        discriminator.requires_grad_(True)
-                        # Train discriminator with real y_true_sp
-                        D_out_real = discriminator(x, y_true_sp)
-                        D_real.append(
-                            np.mean(D_out_real.detach().cpu().numpy()))
-                        D_loss_real = loss_fns['GAN'](
-                            D_out_real, is_real=True)*0.5
-                        # Train discriminator with generated y_pred
-                        y_pred = generator(x).detach()
-                        D_out_fake = discriminator(x, y_pred)
-                        D_fake.append(
-                            np.mean(D_out_fake.detach().cpu().numpy()))
-                        D_loss_fake = loss_fns['GAN'](
-                            D_out_fake, is_real=False)*0.5
-
-                        D_loss = ((D_loss_fake + D_loss_real)/2) * \
-                            loss_weights['GAN'] / chunks
-                        if phase == "train":
-                            D_loss.backward()
-                        loss_sum["D"] += D_loss.detach().item()
+                    D_loss = (D_loss_fake*0.5 + D_loss_real*0.5)
                     if phase == "train":
+                        D_loss.backward()
                         optimizer_D.step()
+                    loss_sum["D"] += D_loss.item()
 
                     generator.zero_grad()
-                    for (x, y_true_img, y_true_sp) in zip(x_chunks, y_true_img_chunks, y_true_sp_shunks):
-                        x = x.to(device)
-                        y_true_img = y_true_img.to(device)
-                        y_true_sp = y_true_sp.to(device)
-
-                        discriminator.requires_grad_(False)
-                        y_pred = generator(x)
-                        D_out = discriminator(x, y_pred)
-                        G_loss_gan = loss_fns['GAN'](
-                            D_out, is_real=True)/chunks
-                        G_loss_data = loss_fns['data'](
-                            y_pred, y_true_sp)/chunks
-                        G_loss_vis = loss_fns['vis'](
-                            x, y_pred, y_true_img)/chunks
-                        G_loss = (
-                            G_loss_gan * loss_weights['GAN'] +
-                            G_loss_data * loss_weights['data'] +
-                            G_loss_vis * loss_weights['vis']
-                        )
-                        if phase == "train":
-                            G_loss.backward()
-                        loss_sum["G_gan"] += G_loss_gan.detach().item()
-                        loss_sum["G_data"] += G_loss_data.detach().item()
-                        loss_sum["G_vis"] += G_loss_vis.detach().item()
-                        loss_sum["G"] += G_loss.detach().item()
+                    discriminator.requires_grad_(False)
+                    # Train generator with updated discriminator
+                    D_out = discriminator(x, y_pred)
+                    G_losses = {
+                        "GAN": gan_loss(D_out, is_real=True),
+                        "data": data_loss(y_pred, y_true_sp),
+                        # "vis": visual_loss(x, y_pred, y_true_img)
+                    }
+                    soft_adapt.update(G_losses)
+                    G_loss = soft_adapt.loss(update_weights=(phase == "train"))
                     if phase == "train":
+                        G_loss.backward()
                         optimizer_G.step()
-            loss_sum["total"] = loss_sum["G"] + loss_sum["D"]
+
+                    loss_sum["G_gan"] += soft_adapt.get("GAN")
+                    loss_sum["G_data"] += soft_adapt.get("data")
+                    # loss_sum["G_vis"] += soft_adapt.get("vis")
+                    loss_sum["G"] += G_loss.item()
+
+            loss_sum["total"] = loss_sum["G"]*0.8 + loss_sum["D"]*0.2
             # Log metrics to tensorboard
+            n_batches = len(loaders[phase])
             for k in loss_sum:
-                loss_sum[k] /=len(loaders[phase])
+                loss_sum[k] /= n_batches
                 writer.add_scalar(
                     f"{phase}/loss/{k}", loss_sum[k], epoch)
             writer.add_scalar(
@@ -244,7 +224,6 @@ def main(args):
             loss_sum.clear()
             D_real.clear()
             D_fake.clear()
-
             torch.cuda.empty_cache()
 
     total_time = time.time() - start_time
@@ -285,6 +264,7 @@ def data_loaders(args):
 def datasets(args):
     train = MyDataset(args.data_dir, subset="train",
                       transforms=transforms(
+                          resize=(300, 400),
                           scale=args.aug_scale,
                           angle=args.aug_angle,
                           flip_prob=0.5,
@@ -293,29 +273,17 @@ def datasets(args):
     valid = MyDataset(args.data_dir, subset="test")
     return train, valid
 
-# custom weights initialization called on netG and netD
 
-
+@torch.no_grad()
 def weights_init(m):
+    """custom weights initialization called on netG and netD"""
     classname = m.__class__.__name__
-    if classname.find('Conv') != -1:
+    if classname.find('Conv') != -1 or \
+            classname.find('BatchNorm') != -1 or \
+            classname.find('Linear') != -1:
         nn.init.normal_(m.weight.data, 0.0, 0.02)
-    elif classname.find('BatchNorm') != -1:
-        nn.init.normal_(m.weight.data, 1.0, 0.02)
-        nn.init.constant_(m.bias.data, 0)
-# def dsc_per_volume(validation_pred, validation_true, patient_slice_index):
-#     dsc_list = []
-#     num_slices = np.bincount([p[0] for p in patient_slice_index])
-#     index = 0
-#     for p in range(len(num_slices)):
-#         y_pred = np.array(validation_pred[index : index + num_slices[p]])
-#         y_true = np.array(validation_true[index : index + num_slices[p]])
-#         dsc_list.append(dsc(y_pred, y_true))
-#         index += num_slices[p]
-#     return dsc_list
-
-# def log_loss_summary(logger, loss, step, prefix=""):
-#     logger.scalar_summary(prefix + "loss", np.mean(loss), step)
+        if m.bias is not None:
+            nn.init.constant_(m.bias.data, 0)
 
 
 def makedirs(args):
@@ -323,34 +291,10 @@ def makedirs(args):
     os.makedirs(args.logs, exist_ok=True)
 
 
-def snapshotargs(args):
-    args_file = os.path.join(args.logs, "args.json")
+def snapshotargs(args, filename="args.json"):
+    args_file = os.path.join(args.logs, filename)
     with open(args_file, "w") as fp:
         json.dump(vars(args), fp, indent=4, sort_keys=True)
-
-
-# def setlogger(args):
-#     log_file = os.path.join(args.logs, __file__.split('.')[0]+".log")
-#     logger = logging.getLogger('__file__')
-#     logger.setLevel(logging.DEBUG)
-#     # create file handler which logs even debug messages
-#     fh = logging.FileHandler(log_file, mode='w')
-#     fh.setLevel(logging.DEBUG)
-#     # create console handler with a higher log level
-#     ch = logging.StreamHandler()
-#     ch.setLevel(logging.ERROR)
-#     # create formatter and add it to the handlers
-#     file_formatter = logging.Formatter(
-#         '%(asctime)s - %(filename)s:%(lineno)d - %(levelname)s: %(message)s',
-#         datefmt="",
-#         style='{')
-#     fh.setFormatter(file_formatter)
-#     console_formatter = logging.Formatter(
-#         '%(asctime)s - %(filename)s:%(lineno)d - %(levelname)s: %(message)s')
-#     ch.setFormatter(console_formatter)
-#     # add the handlers to logger
-#     logger.addHandler(ch)
-#     logger.addHandler(fh)
 
 
 if __name__ == "__main__":
@@ -360,22 +304,17 @@ if __name__ == "__main__":
     parser.add_argument(
         "--batch-size", help="input batch size for training (default: %(default)d)",
         type=int,
-        default=16,
-    )
-    parser.add_argument(
-        "--mini-batch", help="input batch size for training (default: %(default)d)",
-        type=int,
-        default=4,
+        default=8,
     )
     parser.add_argument(
         "--epochs", help="number of epochs to train (default: %(default)d)",
         type=int,
-        default=1000,
+        default=5000,
     )
     parser.add_argument(
-        "--lr", help="initial learning rate (default: %(default).4f)",
+        "--lr", help="initial learning rate (default: %(default).5f)",
         type=float,
-        default=0.0001,
+        default=0.00002,
     )
     parser.add_argument(
         "--visual-weight", help="weight of img visual loss (default: %(default).2f)",
@@ -407,16 +346,6 @@ if __name__ == "__main__":
         type=int,
         default=4,
     )
-    # parser.add_argument(
-    #     "--vis-images", help="number of visualization images to save in log file (default: 200)",
-    #     type=int,
-    #     default=200,
-    # )
-    # parser.add_argument(
-    #     "--vis-freq", help="frequency of saving images to log file (default: 10)",
-    #     type=int,
-    #     default=10,
-    # )
     parser.add_argument(
         "--weights", help="folder to save weights (default: %(default)s)",
         type=str,
