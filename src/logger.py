@@ -4,11 +4,11 @@
 Handling logs with logging while tracking the process with tqdm
 """
 
-import io
 import logging
 import sys
 
 from tqdm.auto import tqdm, trange
+
 
 class TeeIo(object):
     """

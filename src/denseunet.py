@@ -35,18 +35,18 @@ class DenseUNet(nn.Module):
         default_layers = 2
         growth_rate = features // default_layers
 
-        self.in_conv = nn.Conv2d(
-            in_channels=in_channels,
-            out_channels=features,
-            kernel_size=1,
-            stride=1,
-            padding=0,
-            bias=False
-        )
+        self.in_conv = nn.Conv2d(in_channels=in_channels,
+                                 out_channels=features,
+                                 kernel_size=1,
+                                 stride=1,
+                                 padding=0,
+                                 bias=False)
 
         self.DenseBlockEncoders = nn.ModuleDict([
-            (f"DBEncoder{i}", DenseUNet._dense_block(
-                features, layers=default_layers, growth_rate=growth_rate, drop_rate=drop_rate))
+            (f"DBEncoder{i}", DenseUNet._dense_block(features,
+                                                     layers=default_layers,
+                                                     growth_rate=growth_rate,
+                                                     drop_rate=drop_rate))
             for i in range(depth)
         ])
 
@@ -67,20 +67,18 @@ class DenseUNet(nn.Module):
                 for i in reversed(range(depth-1))
             ])
 
-        self.DenseBlockDecoders = nn.ModuleDict(
-            [
-                (f"DBDecoder{i}", DenseUNet._dense_block(
-                    3 * features, layers=default_layers, growth_rate=growth_rate))
-                for i in reversed(range(depth))
-            ])
+        self.DenseBlockDecoders = nn.ModuleDict([
+            (f"DBDecoder{i}", DenseUNet._dense_block(
+                3 * features, layers=default_layers, growth_rate=growth_rate))
+            for i in reversed(range(depth))
+        ])
 
         self.out_conv = nn.Conv2d(
             in_channels=4*features,
             out_channels=out_channels,
             kernel_size=1,
             stride=1,
-            bias=False
-        )
+            bias=False)
 
     def forward(self, x):
         x = self.in_conv(x)
@@ -106,13 +104,12 @@ class DenseUNet(nn.Module):
             out_channels = in_channels // 2
         block = []
         block.append(nn.BatchNorm2d(num_features=in_channels))
-        block.append(nn.Conv2d(
-                in_channels=in_channels,
-                out_channels=out_channels,
-                kernel_size=1,
-                stride=1,
-                padding=0,
-                bias=False))
+        block.append(nn.Conv2d(in_channels=in_channels,
+                               out_channels=out_channels,
+                               kernel_size=1,
+                               stride=1,
+                               padding=0,
+                               bias=False))
         if drop_rate > 0:
             block.append(nn.Dropout2d(p=drop_rate, inplace=True))
         block.append(nn.AvgPool2d(2))
@@ -131,10 +128,12 @@ class DenseUNet(nn.Module):
 
     @staticmethod
     def _bottleneck(in_channels, layers=8, growth_rate=8):
-        return DenseUNet._dense_block(in_channels, layers=layers, growth_rate=growth_rate)
+        return DenseUNet._dense_block(
+            in_channels, layers=layers, growth_rate=growth_rate)
 
     class _dense_block(nn.Module):
-        def __init__(self, in_channels, layers=4, growth_rate=8, drop_rate=0.01):
+        def __init__(self, in_channels, layers=4,
+                     growth_rate=8, drop_rate=0.01):
             super().__init__()
             self.composite_layers = nn.ModuleList([
                 DenseUNet._dense_block._composite(
