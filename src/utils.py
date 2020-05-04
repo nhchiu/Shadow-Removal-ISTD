@@ -56,11 +56,13 @@ def apply_sp(shadowed, sp):
 
 
 def uint2float(array):
+    assert array.dtype == np.uint8
     return array.astype(np.float32)/255
 
 
 def float2uint(array):
-    return np.clip(array * 255, 0, 255).astype(np.uint8)
+    assert (array.dtype == np.float32) or (array.dtype == np.float64)
+    return (array * 255).astype(np.uint8)
 
 
 def normalize_ndarray(array):

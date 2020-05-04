@@ -21,17 +21,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from mydataset import MyDataset
 
-
-class UNet2(nn.Module):
+class UNet(nn.Module):
 
     def __init__(self,
-                 in_channels=MyDataset.in_channels,
-                 out_channels=MyDataset.out_channels,
-                 in_features=64):
-        super(UNet2, self).__init__()
-        features = in_features
+                 in_channels,
+                 out_channels,
+                 ngf=64, **kwargs):
+        super(UNet, self).__init__()
+        features = ngf
         self.depth = 5
 
         down_features = [in_channels]
@@ -41,7 +39,7 @@ class UNet2(nn.Module):
         self.encoders = nn.ModuleList()
         for i in range(self.depth):
             self.encoders.append(
-                UNet2._block(down_features[i], down_features[i+1]))
+                UNet._block(down_features[i], down_features[i+1]))
 
         up_features = [features * (2**(self.depth-1))]
         for i in reversed(range(self.depth-1)):
@@ -50,13 +48,13 @@ class UNet2(nn.Module):
         self.decoders = nn.ModuleList()
         for i in range(self.depth-1):
             self.decoders.append(
-                UNet2._up_block(up_features[i], up_features[i+1]))
+                UNet._up_block(up_features[i], up_features[i+1]))
 
-        self.out_conv = nn.Conv2d(
-            in_channels=features,
-            out_channels=out_channels,
-            kernel_size=1,
-            stride=1)
+        self.out_conv = nn.Conv2d(in_channels=features,
+                                  out_channels=out_channels,
+                                  kernel_size=1,
+                                  stride=1,
+                                  bias=False)
 
     def forward(self, x):
         # encode
@@ -84,16 +82,18 @@ class UNet2(nn.Module):
                                         kernel_size=3,
                                         stride=1,
                                         padding=1,
+                                        padding_mode='reflect',
                                         bias=False,)),
-                    ("lrelu0", nn.LeakyReLU(negative_slope=0.1, inplace=True)),
+                    ("lrelu0", nn.LeakyReLU(negative_slope=0.2, inplace=True)),
                     ("norm0", nn.BatchNorm2d(num_features=features)),
                     ("conv1", nn.Conv2d(in_channels=features,
                                         out_channels=features,
                                         kernel_size=3,
                                         stride=1,
                                         padding=1,
+                                        padding_mode='reflect',
                                         bias=False,)),
-                    ("lrelu1", nn.LeakyReLU(negative_slope=0.1, inplace=True)),
+                    ("lrelu1", nn.LeakyReLU(negative_slope=0.2, inplace=True)),
                     ("norm1", nn.BatchNorm2d(num_features=features))
                 ])
             )
@@ -110,9 +110,8 @@ class UNet2(nn.Module):
                 out_channels=features,
                 kernel_size=2,
                 stride=2,
-                bias=False
-            )
-            self.conv_block = UNet2._block(2*features, features)
+                bias=False)
+            self.conv_block = UNet._block(2*features, features)
 
         def forward(self, x, link):
             assert(link.size(1) == self.features)

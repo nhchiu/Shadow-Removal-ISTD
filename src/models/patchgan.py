@@ -13,41 +13,37 @@ https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-
-from mydataset import MyDataset
 
 
-class Discriminator(nn.Module):
+class PatchGAN(nn.Module):
 
     def __init__(self,
-                 in_channels=MyDataset.in_channels,
-                 in_channels2=MyDataset.out_channels,
-                 features=64,
-                 n_layers=3):
-        super(Discriminator, self).__init__()
+                 in_channels,
+                 in_channels2,
+                 ndf=64,
+                 n_layers=3, **kwargs):
+        super(PatchGAN, self).__init__()
         ksize = 4
         self.blocks = nn.ModuleList([
             nn.Sequential(
                 nn.Conv2d(in_channels=in_channels+in_channels2,
-                          out_channels=features,
+                          out_channels=ndf,
                           kernel_size=ksize,
                           stride=2,
-                          padding=1
-                          ),
+                          padding=1),
                 nn.LeakyReLU(0.2, inplace=True)
             )
         ])
-        # (N, features, H/2, W/2)
-        prev_channels = features
+        # (N, ndf, H/2, W/2)
+        prev_channels = ndf
         for n in range(1, n_layers):  # gradually increase the number of filters
             if n < 4:
                 self.blocks.append(self._block(prev_channels, prev_channels*2))
                 prev_channels *= 2
-                # (N, features*(2**n), H/(2**(n+1)), W/(2**(n+1)))
+                # (N, ndf*(2**n), H/(2**(n+1)), W/(2**(n+1)))
             else:
                 self.blocks.append(self._block(prev_channels, prev_channels))
-                # (N, features*(2**3), H/(2**(n+1)), W/(2**(n+1)))
+                # (N, ndf*(2**3), H/(2**(n+1)), W/(2**(n+1)))
 
         out_channels = prev_channels*2 if n_layers < 4 else prev_channels
         self.blocks.append(
@@ -63,14 +59,15 @@ class Discriminator(nn.Module):
                 nn.LeakyReLU(0.2, inplace=True)
             )
         )
-        # (N, features*(2**min(n_layers, 3)), H/(2**(n_layers)) - 1, W/(2**(n_layers)) - 1)
+        # (N, ndf*(2**min(n_layers, 3)), H/(2**(n_layers)) - 1, W/(2**(n_layers)) - 1)
 
         # squeeze to 1 channel prediction map
         self.blocks.append(
             nn.Conv2d(out_channels, 1,
-                      kernel_size=ksize, stride=1, padding=1, padding_mode='reflect', bias=False)
+                      kernel_size=ksize, stride=1, padding=1,
+                      padding_mode='reflect', bias=False)
         )
-        # (N, features*(2**min(n_layers, 3)), H/(2**(n_layers)) - 2, W/(2**(n_layers)) - 2)
+        # (N, ndf*(2**min(n_layers, 3)), H/(2**(n_layers)) - 2, W/(2**(n_layers)) - 2)
         # self.activation = nn.Sigmoid()
         # Use BCEWithLogitsLoss instead of BCELoss!
 
