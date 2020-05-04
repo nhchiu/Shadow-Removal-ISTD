@@ -79,7 +79,7 @@ class CGAN(object):
             drop_last=True,
             num_workers=args.workers,
             worker_init_fn=lambda id: np.random.seed(42+id),
-            pin_memory=False)  # (self.device.type != 'cpu'))
+            pin_memory=(self.device.type == 'cuda'))
         self.valid_loader = DataLoader(
             valid_dataset,
             batch_size=args.batch_size,
@@ -91,14 +91,14 @@ class CGAN(object):
         # loss
         if "train" in args.tasks:
             self.logger.info("Creating loss functions")
-            self.d_loss = AdversarialLoss().to(self.device)
+            self.d_loss = AdversarialLoss().to(self.device, non_blocking=True)
             self.g_loss = SoftAdapt(OrderedDict({"adv": AdversarialLoss(),
                                                  "data": DataLoss(),
                                                  "vis": VisualLoss(), }),
                                     init_weights=[1, 100, 50],
                                     beta=0.1,
                                     weighted=True,
-                                    normalized=True).to(self.device)
+                                    normalized=True).to(self.device, non_blocking=True)
 
             self.train_logdir = os.path.join(args.logs, 'train')
             self.valid_logdir = os.path.join(args.logs, 'valid')
@@ -165,8 +165,8 @@ class CGAN(object):
             y_true_img = y_true["image"]
             y_true_sp = y_true["sp"]
 
-            x_gpu = x.to(self.device)
-            y_true_sp_gpu = y_true_sp.to(self.device)
+            x_gpu = x.to(self.device, non_blocking=True)
+            y_true_sp_gpu = y_true_sp.to(self.device, non_blocking=True)
 
             self.optim_D.zero_grad()
             self.optim_G.zero_grad()
@@ -196,10 +196,10 @@ class CGAN(object):
 
                 G_losses = {"adv": (D_out_, True),
                             "data": (y_pred_gpu,
-                                     y_true_sp.to(self.device)),
+                                     y_true_sp.to(self.device, non_blocking=True)),
                             "vis": (x_gpu,
                                     y_pred_gpu,
-                                    y_true_img.to(self.device))}
+                                    y_true_img.to(self.device, non_blocking=True))}
                 G_loss = self.g_loss(G_losses, update_weights=False)
                 if training:
                     G_loss.backward()
@@ -237,7 +237,7 @@ class CGAN(object):
                 input_list = []
                 pred_list = []
 
-                x = x.to(self.device)
+                x = x.to(self.device, non_blocking=True)
                 y_pred = self.G(x)
                 y_pred_np = y_pred.detach().cpu().numpy()
                 pred_list.extend([y_pred_np[s].transpose(1, 2, 0)
