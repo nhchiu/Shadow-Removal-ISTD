@@ -128,8 +128,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--device",
         help="device for training (default: %(default)s)",
+        nargs='+',
         type=str,
-        default="cuda:0",)
+        default=["cuda"],)
     parser.add_argument(
         "--device2",
         help="second device for Data Parallelism (default: %(default)s)",

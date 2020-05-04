@@ -10,6 +10,7 @@ from collections import OrderedDict
 import cv2 as cv
 import numpy as np
 import torch
+import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
@@ -32,7 +33,7 @@ class CGAN(object):
     def __init__(self, args):
         self.logger = logging.getLogger(__name__)
         self.device = torch.device(
-            args.device if torch.cuda.is_available() else "cpu")
+            args.device[0] if torch.cuda.is_available() else "cpu")
         # network models
         self.logger.info("Creating network model")
         self.G = networks.get_generator(
@@ -52,6 +53,9 @@ class CGAN(object):
                          d_weights=args.load_weights_d)
         self.G.to(self.device)
         self.D.to(self.device)
+        if len(args.device) > 1 and torch.cuda.is_available():
+            self.G = nn.DataParallel(self.G, args.device)
+            self.D = nn.DataParallel(self.D, args.device)
         self.optim_G = optim.Adam(self.G.parameters(),
                                   lr=args.lr, betas=(0.5, 0.999))
         self.optim_D = optim.Adam(self.D.parameters(),
@@ -264,13 +268,17 @@ class CGAN(object):
                     f"{m}/{key}", measures[m][key], epoch)
 
     def save(self, weights="../weights", suffix="latest"):
-        G_name = self.G.__class__.__name__
-        D_name = self.D.__class__.__name__
+        module_G = self.G.module if isinstance(self.G, nn.DataParallel) \
+            else self.G
+        module_D = self.D.module if isinstance(self.D, nn.DataParallel) \
+            else self.D
+        G_name = module_G.__class__.__name__
+        D_name = module_D.__class__.__name__
         torch.save(
-            self.G.state_dict(),
+            module_G.state_dict(),
             os.path.join(weights, f"{G_name}_{suffix}.pt"))
         torch.save(
-            self.D.state_dict(),
+            module_D.state_dict(),
             os.path.join(weights, f"{D_name}_{suffix}.pt"))
 
     def init_weight(self, g_weights=None, d_weights=None):
