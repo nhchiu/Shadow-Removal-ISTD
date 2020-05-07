@@ -61,6 +61,8 @@ class CGAN(object):
                                   lr=args.lr_G, betas=(args.beta1, args.beta2))
         self.optim_D = optim.Adam(self.D.parameters(),
                                   lr=args.lr_D, betas=(args.beta1, args.beta2))
+        self.decay_G = optim.ExponentialLR(self.optim_G, 1-args.decay)
+        self.decay_D = optim.ExponentialLR(self.optim_D, 1-args.decay)
         # data loaders
         self.logger.info("Creating data loaders")
         train_dataset = ISTDDataset(args.data_dir, subset="train",
@@ -209,6 +211,8 @@ class CGAN(object):
                     loss["G_"+k] += v
                 loss["G"] += G_loss.item()
         loss["total"] = loss["G"]*0.8 + loss["D"]*0.2
+        self.decay_G.step()
+        self.decay_D.step()
 
         # return metrics
         n_batches = len(data_loader)

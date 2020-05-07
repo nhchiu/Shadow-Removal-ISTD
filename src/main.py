@@ -118,6 +118,12 @@ if __name__ == "__main__":
         help="initial learning rate of generator (default: %(default).5f)",
         default=0.0001, type=float,)
     parser.add_argument(
+        "--decay",
+        help=("Decay to apply to lr each cycle. "
+              "(1-decay)^n_iter * lr gives the final lr. "
+              "e.g. 0.00002 will lead to .13 of lr after 100k cycles"),
+        default=0.00005, type=float)
+    parser.add_argument(
         "--workers",
         help="number of workers for data loading (default: %(default)d)",
         type=int,
