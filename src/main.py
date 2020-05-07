@@ -96,6 +96,10 @@ if __name__ == "__main__":
         default="train",
         choices=["train", "infer"])
     parser.add_argument(
+        "--devices",
+        help="device for training (default: %(default)s)",
+        default=["cuda"], type=str, nargs='+',)
+    parser.add_argument(
         "--batch-size",
         help="input batch size for training (default: %(default)d)",
         type=int,
@@ -113,17 +117,6 @@ if __name__ == "__main__":
         "--lr-G",
         help="initial learning rate of generator (default: %(default).5f)",
         default=0.0001, type=float,)
-    parser.add_argument(
-        "--device",
-        help="device for training (default: %(default)s)",
-        nargs='+',
-        type=str,
-        default=["cuda"],)
-    parser.add_argument(
-        "--device2",
-        help="second device for Data Parallelism (default: %(default)s)",
-        type=str,
-        default="",)
     parser.add_argument(
         "--workers",
         help="number of workers for data loading (default: %(default)d)",

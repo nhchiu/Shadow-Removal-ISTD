@@ -33,7 +33,7 @@ class CGAN(object):
     def __init__(self, args):
         self.logger = logging.getLogger(__name__)
         self.device = torch.device(
-            args.device[0] if torch.cuda.is_available() else "cpu")
+            args.devices[0] if torch.cuda.is_available() else "cpu")
         # network models
         self.logger.info("Creating network model")
         self.G = networks.get_generator(
@@ -53,9 +53,10 @@ class CGAN(object):
                          d_weights=args.load_weights_d)
         self.G.to(self.device)
         self.D.to(self.device)
-        if len(args.device) > 1 and torch.cuda.is_available():
-            self.G = nn.DataParallel(self.G, args.device)
-            self.D = nn.DataParallel(self.D, args.device)
+        if len(args.devices) > 1 and torch.cuda.is_available():
+            devices = [torch.device(d) for d in args.devices]
+            self.G = nn.DataParallel(self.G, devices)
+            self.D = nn.DataParallel(self.D, devices)
         self.optim_G = optim.Adam(self.G.parameters(),
                                   lr=args.lr_G, betas=(args.beta1, args.beta2))
         self.optim_D = optim.Adam(self.D.parameters(),
