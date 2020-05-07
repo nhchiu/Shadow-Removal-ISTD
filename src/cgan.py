@@ -171,8 +171,7 @@ class CGAN(object):
             self.optim_D.zero_grad()
             self.optim_G.zero_grad()
             with torch.set_grad_enabled(training):
-                self.D.zero_grad()
-                self.D.requires_grad_(True)
+                self.optim_D.zero_grad()
                 # Train discriminator with real y_true_sp
                 D_out_real = self.D(x_gpu, y_true_sp_gpu)
                 D_loss_real = self.d_loss(D_out_real, is_real=True)
@@ -188,8 +187,7 @@ class CGAN(object):
                 D_out["fake"] += D_out_fake.detach().cpu().numpy().mean()
                 loss["D"] += D_loss.item()
 
-                self.G.zero_grad()
-                self.D.requires_grad_(False)
+                self.optim_G.zero_grad()
                 # Train self.G with updated discriminator
                 D_out_ = self.D(x_gpu, y_pred_gpu)
                 # y_pred = y_pred_gpu.to("cpu")
