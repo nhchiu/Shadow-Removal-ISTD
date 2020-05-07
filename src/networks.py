@@ -1,11 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from enum import Enum, unique
+
 import torch
 from models.denseunet import DenseUNet
+from models.mnet import MNet
 from models.patchgan import PatchGAN
 from models.unet import UNet
-from models.mnet import MNet
 
 
 @torch.no_grad()
@@ -21,16 +23,24 @@ def weights_init(m):
         #     nn.init.constant_(m.bias.data, 0)
 
 
+@unique()
+class Generators(Enum):
+    UNET = UNet
+    MNET = MNet
+    DENSEUNET = DenseUNet
+
+
+@unique()
+class Discriminators(Enum):
+    PATCHGAN = PatchGAN
+
+
 def get_generator(key: str, *args, **kwargs):
-    networks = {"unet": UNet,
-                "mnet": MNet,
-                "denseunet": DenseUNet}
-    return networks.get(key)(*args, **kwargs)
+    return Generators[key.upper()].value(*args, **kwargs)
 
 
 def get_discriminator(key: str, *args, **kwargs):
-    networks = {"patchgan": PatchGAN}
-    return networks.get(key)(*args, **kwargs)
+    return Discriminators[key.upper()].value(*args, **kwargs)
 
 
 # """
