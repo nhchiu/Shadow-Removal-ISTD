@@ -57,9 +57,9 @@ class CGAN(object):
             self.G = nn.DataParallel(self.G, args.device)
             self.D = nn.DataParallel(self.D, args.device)
         self.optim_G = optim.Adam(self.G.parameters(),
-                                  lr=args.lr, betas=(0.5, 0.999))
+                                  lr=args.lr_G, betas=(args.beta1, args.beta2))
         self.optim_D = optim.Adam(self.D.parameters(),
-                                  lr=args.lr, betas=(0.5, 0.999))
+                                  lr=args.lr_D, betas=(args.beta1, args.beta2))
         # data loaders
         self.logger.info("Creating data loaders")
         train_dataset = ISTDDataset(args.data_dir, subset="train",
@@ -179,7 +179,7 @@ class CGAN(object):
                 y_pred_gpu = self.G(x_gpu)
                 D_out_fake = self.D(x_gpu, y_pred_gpu.detach())
                 D_loss_fake = self.d_loss(D_out_fake, is_real=False)
-                D_loss = (D_loss_fake + D_loss_real) * 0.5 * 0.1
+                D_loss = (D_loss_fake + D_loss_real) * 0.5
                 if training:
                     D_loss.backward()
                     self.optim_D.step()

@@ -106,25 +106,13 @@ if __name__ == "__main__":
         type=int,
         default=5000,)
     parser.add_argument(
-        "--lr",
-        help="initial learning rate (default: %(default).5f)",
-        type=float,
-        default=0.001,)
-    # parser.add_argument(
-    #     "--visual-weight",
-    #     help="weight of img visual loss (default: %(default).2f)",
-    #     type=float,
-    #     default=10.0,)
-    # parser.add_argument(
-    #     "--data-weight",
-    #     help="weight of shadow parameter loss (default: %(default).2f)",
-    #     type=float,
-    #     default=50.0,)
-    # parser.add_argument(
-    #     "--gan-weight",
-    #     help="weight of GAN loss (default: %(default).2f)",
-    #     type=float,
-    #     default=1.0,)
+        "--lr-D",
+        help="initial learning rate of discriminator (default: %(default).5f)",
+        default=0.0001, type=float,)
+    parser.add_argument(
+        "--lr-G",
+        help="initial learning rate of generator (default: %(default).5f)",
+        default=0.0001, type=float,)
     parser.add_argument(
         "--device",
         help="device for training (default: %(default)s)",
@@ -198,5 +186,14 @@ if __name__ == "__main__":
         help='manual random seed (default: %(default)s)',
         default=38107943,
         type=int)
+    parser.add_argument(
+        "--beta1",
+        help=("Adam betas[0], "
+              "DCGAN paper recommends .5 instead of the usual .9"),
+        default=0.5, type=float)
+    parser.add_argument(
+        "--beta2",
+        help="Adam betas[1]",
+        default=0.999, type=float)
     args = parser.parse_args()
     main(args)
