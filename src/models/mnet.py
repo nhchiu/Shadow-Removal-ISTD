@@ -25,7 +25,7 @@ class MNet(nn.Module):
     def __init__(self,
                  in_channels,
                  out_channels,
-                 ngf=64, **kwargs):
+                 ngf=64, no_conv_t=False, **kwargs):
         super(MNet, self).__init__()
         depth = 4
 
@@ -50,9 +50,11 @@ class MNet(nn.Module):
         for i in reversed(range(depth)):
             features_in = (2 ** min(i+1, 3)) * ngf
             features_out = (2 ** min(i, 3)) * ngf
-            self.decoders.append(MNet._up_block(features_in, features_out)
+            self.decoders.append(MNet._up_block(features_in,
+                                                features_out, no_conv_t)
                                  if i == depth-1 else
-                                 MNet._up_block(features_in*2, features_out))
+                                 MNet._up_block(features_in*2,
+                                                features_out, no_conv_t))
 
         # self.decoder4 = MNet._up_block(ngf * 8, ngf * 8)
         # self.decoder3 = MNet._up_block(
@@ -63,12 +65,21 @@ class MNet(nn.Module):
         #     (ngf * 2) * 2, ngf)
 
         # self.activate = nn.Tanh()
-        self.up_conv = nn.ConvTranspose2d(in_channels=ngf * 2,
-                                          out_channels=out_channels,
-                                          kernel_size=4,
-                                          stride=2,
-                                          padding=1,
-                                          bias=False)
+        self.up_conv = nn.Sequential(nn.Upsample(scale_factor=2),
+                                     nn.Conv2d(in_channels=ngf * 2,
+                                               out_channels=out_channels,
+                                               kernel_size=3,
+                                               stride=1,
+                                               padding=1,
+                                               padding_mode="reflect",
+                                               bias=False)
+                                     ) if no_conv_t else \
+            nn.ConvTranspose2d(in_channels=ngf * 2,
+                               out_channels=out_channels,
+                               kernel_size=4,
+                               stride=2,
+                               padding=1,
+                               bias=False)
 
     def forward(self, x):
         # conv = self.conv(x)
@@ -110,14 +121,26 @@ class MNet(nn.Module):
         )
 
     @staticmethod
-    def _up_block(in_channels, features):
+    def _up_block(in_channels, features, no_conv_t):
+        if no_conv_t:
+            upconv = nn.Sequential(
+                nn.Upsample(scale_factor=2),
+                nn.Conv2d(in_channels=in_channels,
+                          out_channels=features,
+                          kernel_size=3,
+                          stride=1,
+                          padding=1,
+                          padding_mode="reflect",
+                          bias=False))
+        else:
+            upconv = nn.ConvTranspose2d(in_channels=in_channels,
+                                        out_channels=features,
+                                        kernel_size=4,
+                                        stride=2,
+                                        padding=1,
+                                        bias=False)
         return nn.Sequential(
             nn.LeakyReLU(negative_slope=0.2, inplace=True),
-            nn.ConvTranspose2d(in_channels=in_channels,
-                               out_channels=features,
-                               kernel_size=4,
-                               stride=2,
-                               padding=1,
-                               bias=False),
+            upconv,
             nn.BatchNorm2d(num_features=features)
         )

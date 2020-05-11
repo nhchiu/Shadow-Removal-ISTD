@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 import torchvision.models as models
-from dataset import ISTDDataset
+from dataset_h5 import ISTDDataset
 
 
 class DataLoss(nn.Module):
@@ -17,7 +17,7 @@ class DataLoss(nn.Module):
     """
     __slots__ = ["reduction", "norm"]
 
-    def __init__(self, norm=F.smooth_l1_loss, reduction: str = 'mean'):
+    def __init__(self, norm=F.l1_loss, reduction: str = 'mean'):
         super().__init__()
         self.reduction = reduction
         self.norm = norm
@@ -38,7 +38,7 @@ class VisualLoss(nn.Module):
         self.reduction = reduction
         self.norm = norm
         VGG19 = models.vgg19_bn(pretrained=True, progress=False)
-        self.VGG = VGG19.features[:40]
+        self.VGG = VGG19.features[:40].requires_grad_(False)
         self.register_buffer(
             'mean',
             torch.tensor(ISTDDataset.mean).reshape((3, 1, 1)))
@@ -65,53 +65,66 @@ class AdversarialLoss(nn.Module):
     and the BCELoss in one single class.
     """
 
-    def __init__(self):
+    def __init__(self, ls=False, rel=False, avg=False):
         super().__init__()
-        self.register_buffer('real_label', torch.tensor(1.0))
-        self.register_buffer('fake_label', torch.tensor(0.0))
+        if not ls:
+            self.register_buffer('real_label', torch.tensor(1.0))
+            self.register_buffer('fake_label', torch.tensor(0.0))
+        else:
+            self.register_buffer('real_label', torch.tensor(1.0))
+            self.register_buffer('fake_label', torch.tensor(-1.0))
+        self.ls = ls
+        self.rel = rel
+        self.avg = avg
 
     def forward(self, D_out, is_real):
         target = self.real_label if is_real else self.fake_label
         target = target.expand_as(D_out)
-        return F.binary_cross_entropy_with_logits(D_out, target)
+        if not self.ls:
+            return F.mse_loss(D_out, target)
+        else:
+            return F.binary_cross_entropy_with_logits(D_out, target)
 
 
 class SoftAdapt(nn.Module):
-    __slots__ = ["losses", "loss_tensor", "prev_losses", "differences",
-                 "weights", "alpha", "beta", "epsilon",
-                 "weighted", "normalized"]
 
-    def __init__(self, losses: dict,
+    def __init__(self, losses: list,
                  init_weights=None,
                  beta=0.1,
                  epsilon=1e-8,
+                 min_=1e-4,
                  weighted=True,
                  normalized=True):
         super().__init__()
-        self.loss_fns = nn.ModuleDict(losses)
-        self.register_buffer('loss_tensor', torch.zeros(len(losses)))
-        self.register_buffer('prev_losses', torch.zeros(len(losses)))
-        self.register_buffer('differences', torch.zeros(len(losses)))
+        self.loss = losses
+        self.size = len(losses)
+        self.register_buffer('current_loss', torch.ones(self.size))
+        self.register_buffer('prev_loss', torch.ones(self.size))
+        self.register_buffer('gradient', torch.zeros(self.size))
         if init_weights is None:
-            self.register_buffer(
-                'weights', torch.ones(len(losses)) / len(losses))
+            self.register_buffer('weights',
+                                 torch.ones(self.size) / self.size)
         else:
-            assert len(init_weights) == len(losses)
-            self.register_buffer(
-                'weights', torch.tensor(init_weights, dtype=torch.float32))
+            assert len(init_weights) == self.size
+            self.register_buffer('weights',
+                                 torch.tensor(init_weights,
+                                              dtype=torch.float32))
             self.weights /= self.weights.sum()
         self.beta: float = beta
         self.epsilon: float = epsilon
         self.weighted: bool = weighted
         self.normalized: bool = normalized
         self.alpha: float = 0.9  # smoothing factor
+        self.min_ = min_
 
     # def _loss_tensor(self):
     #     return torch.stack(tuple(self.losses.values()), dim=0)
 
     def update(self, losses: dict):
-        loss = [self.loss_fns[k](*(losses[k])) for k in self.loss_fns]
-        self.loss_tensor = torch.stack(loss, dim=0)
+        # for i, l in enumerate(self.loss):
+        #     self.current_loss[i] = losses[l]
+        loss_list = [losses[k] for k in self.loss]
+        self.current_loss = torch.stack(tuple(loss_list), dim=0)
 
     # def update_loss(self, loss: str, data: torch.Tensor):
     #     self.losses[loss] = data
@@ -119,36 +132,34 @@ class SoftAdapt(nn.Module):
     @torch.no_grad()
     def update_weights(self,):
         # Update gradient and average of previous losses
-        loss_detached = self.loss_tensor.detach()
-        self.differences = self.alpha * self.differences + \
-            (1-self.alpha) * (loss_detached-self.prev_losses)
-        self.prev_losses = self.alpha * self.prev_losses + \
-            (1-self.alpha) * loss_detached
+        loss_detached = self.current_loss.detach()
+        self.gradient = (loss_detached-self.prev_loss)
         # Updated weights
-        grad = self.differences
-        if self.normalized:
-            grad /= torch.clamp(grad.abs().sum(), min=self.epsilon)
+        grad = self.gradient
+        if self.normalized:  # use relative ratios intead of absolute values
+            grad /= self.prev_loss.clamp(min=self.epsilon)
+            # grad /= torch.clamp(grad.abs().sum(), min=self.epsilon)
         grad -= grad.max()
-        self.weights = F.softmax(self.beta*grad, dim=0)
-        if self.weighted:
-            self.weights *= self.prev_losses
-            self.weights /= torch.clamp(self.weights.sum(),
-                                        min=self.epsilon)
+        new_weight = F.softmax(self.beta * grad, dim=0)
+        if self.weighted:  # account for losses of different ranges
+            new_weight *= (self.prev_loss.sum() - self.prev_loss)
+            new_weight /= new_weight.sum()
+            # self.prev_loss.max()/self.prev_loss.clamp(min=self.epsilon)
+        self.weights = self.alpha * self.weights + (1-self.alpha) * new_weight
+        assert self.weights.requires_grad is False
+        self.prev_loss = (loss_detached)
+        # self.weights *= self.prev_loss
+        # self.weights /= torch.clamp(self.weights.sum(),
+        #                             min=self.epsilon)
 
     def forward(self, losses, update_weights=False):
         self.update(losses)
         if update_weights:
             self.update_weights()
-        assert self.weights.requires_grad is False
-        return torch.sum(self.loss_tensor * self.weights)
+        return torch.sum(self.current_loss * self.weights)
 
     def get_loss(self,):
-        return dict(zip(self.loss_fns.keys(), self.loss_tensor.tolist()))
+        return dict(zip(self.loss, self.current_loss.tolist()))
 
     def get_weights(self,):
-        return dict(zip(self.loss_fns.keys(), self.weights.tolist()))
-
-    # def to(self, device):
-    #     self.prev_losses = self.prev_losses.to(device)
-    #     self.differences = self.differences.to(device)
-    #     self.weights = self.weights.to(device)
+        return dict(zip(self.loss, self.weights.tolist()))

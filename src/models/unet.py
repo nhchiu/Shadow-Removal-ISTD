@@ -27,7 +27,7 @@ class UNet(nn.Module):
     def __init__(self,
                  in_channels,
                  out_channels,
-                 ngf=64, **kwargs):
+                 ngf=64, no_conv_t=False, **kwargs):
         super(UNet, self).__init__()
         features = ngf
         self.depth = 5

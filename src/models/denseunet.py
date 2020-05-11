@@ -23,7 +23,7 @@ class DenseUNet(nn.Module):
     def __init__(self,
                  in_channels,
                  out_channels,
-                 ngf=48,
+                 ngf=48, no_conv_t=False,
                  drop_rate=0, **kwargs):
         super(DenseUNet, self).__init__()
         depth = 5
@@ -56,9 +56,9 @@ class DenseUNet(nn.Module):
 
         self.TransUps = nn.ModuleDict(
             [
-                (f"TU{depth-1}", DenseUNet._trans_up(2*ngf, ngf))
+                (f"TU{depth-1}", DenseUNet._trans_up(2*ngf, ngf, no_conv_t))
             ]+[
-                (f"TU{i}", DenseUNet._trans_up(4*ngf, ngf))
+                (f"TU{i}", DenseUNet._trans_up(4*ngf, ngf, no_conv_t))
                 for i in reversed(range(depth-1))
             ])
 
@@ -112,14 +112,26 @@ class DenseUNet(nn.Module):
         return nn.Sequential(*block)
 
     @staticmethod
-    def _trans_up(in_channels, out_channels=None):
+    def _trans_up(in_channels, out_channels=None, no_conv_t=False):
         if out_channels is None:
             out_channels = in_channels // 4
-        return nn.ConvTranspose2d(in_channels=in_channels,
-                                  out_channels=out_channels,
-                                  kernel_size=2,
-                                  stride=2,
-                                  bias=False)
+
+        if no_conv_t:
+            return nn.Sequential(
+                nn.Upsample(scale_factor=2),
+                nn.Conv2d(in_channels=in_channels,
+                          out_channels=out_channels,
+                          kernel_size=3,
+                          stride=1,
+                          padding=1,
+                          padding_mode="reflect",
+                          bias=False))
+        else:
+            return nn.ConvTranspose2d(in_channels=in_channels,
+                                      out_channels=out_channels,
+                                      kernel_size=2,
+                                      stride=2,
+                                      bias=False)
 
     @staticmethod
     def _bottleneck(in_channels, layers=8, growth_rate=8):

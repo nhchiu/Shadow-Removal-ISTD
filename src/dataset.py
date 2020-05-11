@@ -16,14 +16,13 @@ class ISTDDataset(torch.utils.data.Dataset):
     """Shadow removal dataset based on ISTD dataset."""
     in_channels: int = 3
     out_channels: int = 3
+
     # B, G, R
     mean = [0.54, 0.57, 0.57]
     std = [0.14, 0.14, 0.14]
 
-    def __init__(self,
-                 root_dir,
-                 subset="train",
-                 transforms=None):
+    def __init__(self, root_dir,
+                 subset="train", transforms=None, preload=True):
         """
         Args:
             root_dir (string): Directory with all the images.
@@ -49,43 +48,62 @@ class ISTDDataset(torch.utils.data.Dataset):
                            key=lambda f: os.path.splitext(f)[0])
         assert(len(self.inputs) == len((self.sps)))
         assert(len(self.inputs) == len((self.imgs)))
-        # print("[Mydataset] Done creating {} dataset".format(subset))
+        self.preload = preload
+        if self.preload:
+            self.input_imgs = [utils.uint2float(
+                cv.imread(os.path.join(self.input_dir, f), cv.IMREAD_COLOR))
+                for f in self.inputs]
+            self.target_imgs = [utils.uint2float(
+                cv.imread(os.path.join(self.img_dir, f), cv.IMREAD_COLOR))
+                for f in self.imgs]
+            self.sp = [np.load(
+                os.path.join(self.sp_dir, f)).astype(np.float32)
+                for f in self.sps]
 
     def __getitem__(self, idx):
-        # leave the reading of images to __getitem__ for memory efficiency
         if torch.is_tensor(idx):
             idx = idx.tolist()
         # read images and npy
-        img_in = cv.imread(os.path.join(
-            self.input_dir, self.inputs[idx]), cv.IMREAD_COLOR)
-        img_in = utils.uint2float(img_in)
+        if not self.preload:  # Load from disk
+            input_image = cv.imread(os.path.join(
+                self.input_dir, self.inputs[idx]), cv.IMREAD_COLOR)
+            input_image = utils.uint2float(input_image)
 
-        img_target = cv.imread(os.path.join(
-            self.img_dir, self.imgs[idx]), cv.IMREAD_COLOR)
-        img_target = utils.uint2float(img_target)
+            target_img = cv.imread(os.path.join(
+                self.img_dir, self.imgs[idx]), cv.IMREAD_COLOR)
+            target_img = utils.uint2float(target_img)
 
-        sp = np.load(os.path.join(
-            self.sp_dir, self.sps[idx])).astype(np.float32)
+            sp = np.load(os.path.join(
+                self.sp_dir, self.sps[idx])).astype(np.float32)
+        else:
+            assert self.input_imgs is not None
+            assert self.target_imgs is not None
+            assert self.sp is not None
+            input_image = self.input_imgs[idx]
+            target_img = self.target_imgs[idx]
+            sp = self.sp[idx]
 
         normalize = transform.Normalize(ISTDDataset.mean, ISTDDataset.std)
-        img_in, img_target = normalize(img_in, img_target)
+        input_image, target_img = normalize(input_image, target_img)
 
         if self.transforms is not None:
-            img_in, sp, img_target = self.transforms(img_in, sp, img_target)
+            input_image, sp, target_img = self.transforms(
+                input_image, sp, target_img)
 
         # ndarray(H, W, C) to tensor(C, H, W)
-        img_in_tensor = torch.as_tensor(img_in.transpose(2, 0, 1),
-                                        dtype=torch.float32)
-        img_target_tensor = torch.as_tensor(img_target.transpose(2, 0, 1),
+        input_img_tensor = torch.as_tensor(input_image.transpose(2, 0, 1),
+                                           dtype=torch.float32)
+        target_img_tensor = torch.as_tensor(target_img.transpose(2, 0, 1),
                                             dtype=torch.float32)
         sp_tensor = torch.as_tensor(sp.transpose(2, 0, 1),
                                     dtype=torch.float32)
 
         filename = os.path.splitext(self.inputs[idx])[0]
 
-        return (img_in_tensor,
-                {"image": img_target_tensor, "sp": sp_tensor},
-                filename)
+        return (filename,
+                input_img_tensor,
+                target_img_tensor,
+                sp_tensor,)
 
     def __len__(self):
         return len(self.inputs)
