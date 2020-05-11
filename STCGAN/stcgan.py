@@ -395,13 +395,13 @@ class STCGAN(object):
         if weights is None:
             weights = self.weights_dir
         torch.save(module_G1.state_dict(),
-                   os.path.join(weights, "G1.pt"))
+                   os.path.join(weights, f"G1-{suffix}.pt"))
         torch.save(module_G2.state_dict(),
-                   os.path.join(weights, "G2.pt"))
+                   os.path.join(weights, f"G2-{suffix}.pt"))
         torch.save(module_D1.state_dict(),
-                   os.path.join(weights, "D1.pt"))
+                   os.path.join(weights, f"D1-{suffix}.pt"))
         torch.save(module_D2.state_dict(),
-                   os.path.join(weights, "D2.pt"))
+                   os.path.join(weights, f"D2-{suffix}.pt"))
 
     def init_weight(self, g1_weights=None, g2_weights=None,
                     d1_weights=None, d2_weights=None):
