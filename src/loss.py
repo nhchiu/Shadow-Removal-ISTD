@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 import torchvision.models as models
-from dataset_h5 import ISTDDataset
+from dataset import ISTDDataset
 
 
 class DataLoss(nn.Module):
