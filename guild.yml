@@ -37,8 +37,8 @@
         weights: ./weights
         workers: 4
       output-scalars: off
-      requires:
-        - dataset
+      # requires:
+      #   - dataset
 
     infer:
       main: src/main
@@ -62,9 +62,9 @@
         net-G: mnet
         workers: 2
       output-scalars: off
-      requires:
-        - dataset
-        - file: ./weights_lr0.00005_RaLSGAN/MNet_latest.pt
+      # requires:
+      #   - dataset
+        # - file: ./weights_lr0.00005_RaLSGAN/MNet_latest.pt
 
 - model: STCGAN
   operations:
@@ -103,8 +103,8 @@
         weights: ./weights
         workers: 4
       output-scalars: off
-      requires:
-        - dataset
+      # requires:
+      #   - dataset
 
     infer:
       main: STCGAN/main
@@ -128,8 +128,9 @@
         logs: ./logs
         workers: 2
       output-scalars: off
-      requires:
-        - dataset
-  resources:
-    dataset:
-      - file: ./ISTD_DATASET
+      # requires:
+      #   - dataset
+
+  # resources:
+  #   dataset:
+    # - file: ./ISTD_DATASET
