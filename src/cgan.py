@@ -169,7 +169,7 @@ class CGAN(object):
                         f"error = {best_loss:4f}")
 
         total_time = datetime.timedelta(seconds=(time.time()-start_time))
-        self.logger.info(f"Training time {total_time:s}")
+        self.logger.info(f"Training time {total_time}")
         self.logger.info(f"Best validation loss: {best_loss:.3f}")
         train_writer.close()
         valid_writer.close()
