@@ -73,6 +73,7 @@ class STCGAN(object):
         # data loaders
         self.logger.info("Creating data loaders")
         train_dataset = ISTDDataset(args.data_dir, subset="train",
+                                    datas=["img", "mask", "target"],
                                     transforms=transform.transforms(
                                         resize=(300, 400),
                                         scale=args.aug_scale,
@@ -80,6 +81,7 @@ class STCGAN(object):
                                         flip_prob=0.5,
                                         crop_size=args.image_size))
         valid_dataset = ISTDDataset(args.data_dir, subset="test",
+                                    datas=["img", "mask", "target"],
                                     transforms=transform.transforms(
                                         resize=(256, 256)))
 
