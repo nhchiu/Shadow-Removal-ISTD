@@ -1,5 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+"""
+Predict a grayscale shadow matte from input image
+"""
 
 import argparse
 import json
@@ -92,6 +95,8 @@ def makedirs(args):
         os.makedirs(args.weights, exist_ok=True)
     if "infer" in args.tasks:
         os.makedirs(args.infered, exist_ok=True)
+        os.makedirs(os.path.join(args.infered, "shadowless"), exist_ok=True)
+        os.makedirs(os.path.join(args.infered, "matte"), exist_ok=True)
 
 
 def snapshotargs(args, filename="args.json"):
@@ -123,11 +128,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--lr-D",
         help="initial learning rate of discriminator (default: %(default).5f)",
-        default=0.00002, type=float,)
+        default=0.0002, type=float,)
     parser.add_argument(
         "--lr-G",
         help="initial learning rate of generator (default: %(default).5f)",
-        default=0.00005, type=float,)
+        default=0.0005, type=float,)
     parser.add_argument(
         "--decay",
         help=("Decay to apply to lr each cycle. (default: %(default).6f)"
@@ -177,11 +182,19 @@ if __name__ == "__main__":
         help="the discriminator model (default: %(default)s)",
         default="patchgan", choices=["patchgan"], type=str,)
     parser.add_argument(
-        "--load-weights-g",
+        "--load-weights-g1",
         help="load weights to continue training (default: %(default)s)",
         default=None)
     parser.add_argument(
-        "--load-weights-d",
+        "--load-weights-g2",
+        help="load weights to continue training (default: %(default)s)",
+        default=None)
+    parser.add_argument(
+        "--load-weights-d1",
+        help="load weights to continue training (default: %(default)s)",
+        default=None)
+    parser.add_argument(
+        "--load-weights-d2",
         help="load weights to continue training (default: %(default)s)",
         default=None)
     parser.add_argument(
@@ -228,6 +241,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--no-batch-norm-D", help="If True, no batch norm in D.",
         type=bool, default=False, const=True, nargs='?')
+    parser.add_argument(
+        "--activation", help="Activation functin of G",
+        default="none", choices=["none", "sigmoid", "tanh", "htanh"], type=str)
+    parser.add_argument(
+        "--jointly", help="Train NN jointly or seperately.",
+        type=bool, default=True, const=True, nargs='?')
     parser.add_argument(
         "--log-every",
         help=("log to tensorboard"

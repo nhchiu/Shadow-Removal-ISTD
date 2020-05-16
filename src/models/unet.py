@@ -15,11 +15,11 @@ https://github.com/mateuszbuda/brain-segmentation-pytorch
 }
 """
 
-from collections import OrderedDict
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+from skip_connection_layer import SkipConnectionLayer
 
 
 class UNet(nn.Module):
@@ -27,94 +27,81 @@ class UNet(nn.Module):
     def __init__(self,
                  in_channels,
                  out_channels,
-                 ngf=64, no_conv_t=False, **kwargs):
+                 ngf=64,
+                 drop_rate=0,
+                 no_conv_t=False,
+                 activation=None, **kwargs):
         super(UNet, self).__init__()
-        features = ngf
-        self.depth = 5
+        depth = 4
 
-        down_features = [in_channels]
-        for i in range(self.depth):
-            down_features.append(features * (2**i))
+        block = _conv_block(ngf * (2**(depth-1)),
+                            ngf * (2**depth))
 
-        self.encoders = nn.ModuleList()
-        for i in range(self.depth):
-            self.encoders.append(
-                UNet._block(down_features[i], down_features[i+1]))
+        for i in reversed(range(1, depth)):
+            block = SkipConnectionLayer(_conv_block(ngf * (2**(i-1)),
+                                                    ngf * 2**i),
+                                        _up_block(ngf * 2**(i+1), ngf * 2**i),
+                                        submodule=block, drop_rate=drop_rate)
 
-        up_features = [features * (2**(self.depth-1))]
-        for i in reversed(range(self.depth-1)):
-            up_features.append(features * (2**i))
+        block = SkipConnectionLayer(_conv_block(in_channels, ngf),
+                                    _up_block(ngf*2, ngf),
+                                    submodule=block, drop_rate=0)
 
-        self.decoders = nn.ModuleList()
-        for i in range(self.depth-1):
-            self.decoders.append(
-                UNet._up_block(up_features[i], up_features[i+1]))
+        sequence = [block,
+                    nn.Conv2d(in_channels=ngf,
+                              out_channels=out_channels,
+                              kernel_size=1,
+                              stride=1,
+                              bias=False)]
+        if activation is not None:
+            assert isinstance(activation, nn.Module)
+            sequence.append(activation)
 
-        self.out_conv = nn.Conv2d(in_channels=features,
-                                  out_channels=out_channels,
-                                  kernel_size=1,
-                                  stride=1,
-                                  bias=False)
+        self.model = nn.Sequential(*sequence)
 
     def forward(self, x):
-        # encode
-        links = []
-        for i, encoder in enumerate(self.encoders):
-            x = encoder(x)
-            if i != self.depth - 1:  # apply downsample except the last block
-                links.append(x)
-                x = F.max_pool2d(x, 2)
+        return self.model(x)
 
-        # decode
-        for i, decoder in enumerate(self.decoders):
-            linkage = links.pop()
-            x = decoder(x, linkage)
 
-        return self.out_conv(x)
+class _conv_block(nn.Module):
+    def __init__(self, in_channels, features):
+        super().__init__()
+        sequence = [nn.Conv2d(in_channels=in_channels,
+                              out_channels=features,
+                              kernel_size=3,
+                              stride=1,
+                              padding=1,
+                              padding_mode='reflect',
+                              bias=False,),
+                    nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                    nn.BatchNorm2d(num_features=features),
+                    nn.Conv2d(in_channels=features,
+                              out_channels=features,
+                              kernel_size=3,
+                              stride=1,
+                              padding=1,
+                              padding_mode='reflect',
+                              bias=False,),
+                    nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                    nn.BatchNorm2d(num_features=features)]
+        self.block = nn.Sequential(sequence)
 
-    class _block(nn.Module):
-        def __init__(self, in_channels, features):
-            super().__init__()
-            self.conv_block = nn.Sequential(
-                OrderedDict([
-                    ("conv0", nn.Conv2d(in_channels=in_channels,
-                                        out_channels=features,
-                                        kernel_size=3,
-                                        stride=1,
-                                        padding=1,
-                                        padding_mode='reflect',
-                                        bias=False,)),
-                    ("lrelu0", nn.LeakyReLU(negative_slope=0.2, inplace=True)),
-                    ("norm0", nn.BatchNorm2d(num_features=features)),
-                    ("conv1", nn.Conv2d(in_channels=features,
-                                        out_channels=features,
-                                        kernel_size=3,
-                                        stride=1,
-                                        padding=1,
-                                        padding_mode='reflect',
-                                        bias=False,)),
-                    ("lrelu1", nn.LeakyReLU(negative_slope=0.2, inplace=True)),
-                    ("norm1", nn.BatchNorm2d(num_features=features))
-                ])
-            )
+    def forward(self, x):
+        out = self.block(x)
+        return F.max_pool2d(out, 2), out
 
-        def forward(self, x):
-            return self.conv_block(x)
 
-    class _up_block(nn.Module):
-        def __init__(self, in_channels, features):
-            super().__init__()
-            self.features = features
-            self.up_conv = nn.ConvTranspose2d(
-                in_channels=in_channels,
-                out_channels=features,
-                kernel_size=2,
-                stride=2,
-                bias=False)
-            self.conv_block = UNet._block(2*features, features)
+class _up_block(nn.Module):
+    def __init__(self, in_channels, features):
+        super().__init__()
+        self.up_conv = nn.ConvTranspose2d(
+            in_channels=in_channels,
+            out_channels=features,
+            kernel_size=2,
+            stride=2,
+            bias=False)
+        self.conv_block = _conv_block(2*features, features)
 
-        def forward(self, x, link):
-            assert(link.size(1) == self.features)
-            x = self.up_conv(x)
-            x = torch.cat((x, link), dim=1)
-            return self.conv_block(x)
+    def forward(self, x, link):
+        x = self.up_conv(x)
+        return self.conv_block(torch.cat((x, link), dim=1))

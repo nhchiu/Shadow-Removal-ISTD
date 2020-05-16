@@ -23,8 +23,10 @@ class DenseUNet(nn.Module):
     def __init__(self,
                  in_channels,
                  out_channels,
-                 ngf=48, no_conv_t=False,
-                 drop_rate=0, **kwargs):
+                 ngf=48,
+                 drop_rate=0,
+                 no_conv_t=False,
+                 activation=None, **kwargs):
         super(DenseUNet, self).__init__()
         depth = 5
         default_layers = 2

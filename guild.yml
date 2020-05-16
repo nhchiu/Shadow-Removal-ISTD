@@ -3,7 +3,7 @@
     train:
       plugins: [cpu, gpu, memory]
       main: src/main
-      label: ${tasks}_${D-loss-fn}_${D-loss-type}_${net-D}-${net-G}_SA-${spftadapt}
+      label: ${tasks}_${D-loss-fn}_${D-loss-type}_${net-D}-${net-G}
       sourcecode:
         select:
           - 'src/*'
@@ -14,7 +14,7 @@
           default: leastsquare
           choices: [standard, leastsquare]
         D-loss-type:
-          default: rel_avg
+          default: normal
           choices: [normal, rel, rel_avg]
         NN-upconv: yes
         batch-size: 8
@@ -23,20 +23,20 @@
         data-dir: ./ISTD_Dataset.hdf5
         decay: 5.0e-05
         devices: cuda
-        epochs: 100000
+        epochs: 2000
         logs: ./logs
         lr-D:
-          default: 2.0e-05
+          default:
           type: float
         lr-G:
-          default: 5.0e-05
+          default:
           type: float
         net-D: patchgan
         net-G: mnet
-        softadapt: yes
+        # softadapt: yes
         weights: ./weights
         workers: 4
-      output-scalars: off
+      # output-scalars: off
       # requires:
       #   - dataset
 
@@ -55,13 +55,15 @@
         data-dir: ./ISTD_Dataset.hdf5
         devices: cuda
         infered: ./infered
-        load-weights-g:
+        load-weights-g1:
+          required: yes
+        load-weights-g2:
           required: yes
         logs: ./logs
         net-D: patchgan
         net-G: mnet
         workers: 2
-      output-scalars: off
+      # output-scalars: off
       # requires:
       #   - dataset
         # - file: ./weights_lr0.00005_RaLSGAN/MNet_latest.pt
@@ -93,11 +95,15 @@
         devices: cuda
         epochs: 2000
         logs: ./logs
+        load-weights-g1:
+        load-weights-g2:
+        load-weights-d1:
+        load-weights-d2:
         lr-D:
-          default: 0.0001
+          default:
           type: float
         lr-G:
-          default: 0.0001
+          default:
           type: float
         # softadapt: yes
         weights: ./weights
