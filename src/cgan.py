@@ -15,11 +15,11 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm, trange
 
-import networks
-import transform
-import utils
-from dataset import ISTDDataset
-from loss import AdversarialLoss, DataLoss, SoftAdapt, VisualLoss
+import src.networks as networks
+import src.transform as transform
+import src.utils as utils
+from src.dataset import ISTDDataset
+from src.loss import AdversarialLoss, DataLoss, VisualLoss  # , SoftAdapt
 
 
 class CGAN(object):
@@ -36,14 +36,16 @@ class CGAN(object):
             in_channels=3,
             out_channels=1,
             ngf=64,
+            drop_rate=0.1,
             no_conv_t=args.NN_upconv,
-            drop_rate=0)
+            activation=args.activation,)
         self.G2 = networks.get_generator(
             args.net_G,
             in_channels=3+1,
             out_channels=3, ngf=64,
+            drop_rate=0.1,
             no_conv_t=args.NN_upconv,
-            drop_rate=0)
+            activation=args.activation,)
         self.D1 = networks.get_discriminator(
             args.net_D,
             in_channels=3+1,
@@ -96,8 +98,8 @@ class CGAN(object):
                                     preload=False)
         valid_dataset = ISTDDataset(args.data_dir, subset="test",
                                     datas=["img", "target", "matte"],
-                                    transforms=transform.transforms(
-                                        resize=(256, 256)),
+                                    # transforms=transform.transforms(
+                                    #     resize=(256, 256)),
                                     preload=False,)
 
         def worker_init(id):
@@ -128,10 +130,13 @@ class CGAN(object):
             self.adv_loss.to(self.device, non_blocking=True)
 
             self.data_loss = DataLoss().to(self.device)
-            # self.visual_loss = VisualLoss().to(self.device)
-            self.lambda1 = 5  # data2 loss
-            self.lambda2 = 0.1   # CGAN1 loss
-            self.lambda3 = 0.1   # CGAN2 loss
+            self.visual_loss = VisualLoss().to(self.device)
+            # data1 loss = 1
+            self.lambda1 = 5     # data2 loss
+            self.lambda2 = 0.5   # CGAN1 loss
+            self.lambda3 = 0.5   # CGAN2 loss
+            self.lambda4 = 5     # Vis1 loss
+            self.lambda5 = 50    # Vis2 loss
             self.adapt = args.softadapt
             # if self.adapt:
             #     self.soft_adapt = SoftAdapt(
@@ -211,9 +216,11 @@ class CGAN(object):
             self.D2.eval()
 
         loss = dict.fromkeys(
-            ["G", "D", "D1", "D2", "G1", "G2", "data1", "data2"], 0.0)
-        D1_out = dict.fromkeys(["real", "fake"], 0.0)
-        D2_out = dict.fromkeys(["real", "fake"], 0.0)
+            ["G", "D",
+             "D1", "D2", "G1", "G2",
+             "data1", "data2", "vis1", "vis2"], 0.0)
+        D1_out = dict.fromkeys(["real", "fake", "diff"], 0.0)
+        D2_out = dict.fromkeys(["real", "fake", "diff"], 0.0)
         data_loader = self.train_loader if training else self.valid_loader
         for(_, x, m, y) in tqdm(data_loader,
                                 total=len(data_loader),
@@ -306,6 +313,9 @@ class CGAN(object):
 
                 data1_loss = self.data_loss(m_pred, m)
                 data2_loss = self.data_loss(y_pred, y)
+                vis1_loss = self.visual_loss(m_pred.expand(-1, 3, -1, -1),
+                                             m.expand(-1, 3, -1, -1))
+                vis2_loss = self.visual_loss(y_pred, y)
                 # if self.adapt:
                 #     G_loss = self.soft_adapt({"adv": g_loss_adv,
                 #                               "data": data_loss,
@@ -315,7 +325,9 @@ class CGAN(object):
                 G_loss = (data1_loss +
                           self.lambda1 * data2_loss +
                           self.lambda2 * G1_loss +
-                          self.lambda3 * G2_loss)
+                          self.lambda3 * G2_loss +
+                          self.lambda4 * vis1_loss +
+                          self.lambda5 * vis2_loss)
                 if training:
                     G_loss.backward()
                     self.optim_G.step()
@@ -324,13 +336,14 @@ class CGAN(object):
                 loss["G2"] += G2_loss.item()
                 loss["data1"] += data1_loss.item()
                 loss["data2"] += data2_loss.item()
+                loss["vis1"] += vis1_loss.item()
+                loss["vis2"] += vis2_loss.item()
                 loss["G"] += G_loss.item()
         if training:
             self.decay_G.step(loss["G"])
             self.decay_D.step(loss["D"])
         torch.cuda.empty_cache()
         # return metrics
-        loss["total"] = loss["G"]*0.8 + loss["D"]*0.2
         n_batches = len(data_loader)
         for key in loss:
             loss[key] /= n_batches
@@ -338,7 +351,11 @@ class CGAN(object):
             D1_out[key] /= n_batches
         for key in D2_out:
             D2_out[key] /= n_batches
-        # softadapt_weights = self.soft_adapt.get_weights() if self.adapt else {}
+        loss["total"] = loss["G"]*0.8 + loss["D"]*0.2
+        D1_out["diff"] = D1_out["real"] - D1_out["fake"]
+        D2_out["diff"] = D2_out["real"] - D2_out["fake"]
+        # softadapt_weights = self.soft_adapt.get_weights()
+        # if self.adapt else {}
         return {"Loss": loss,
                 "D1_out": D1_out,
                 "D2_out": D2_out}
@@ -361,7 +378,7 @@ class CGAN(object):
                 m_pred = self.G1(x)
                 y_pred = self.G2(torch.cat((x, m_pred), dim=1))
 
-                x_np = x.detach().cpu().numpy()
+                # x_np = x.detach().cpu().numpy()
                 m_pred_np = m_pred.detach().cpu().numpy()
                 y_pred_np = y_pred.detach().cpu().numpy()
                 m_pred_list.extend([m_pred_np[s].transpose(1, 2, 0)
@@ -373,16 +390,16 @@ class CGAN(object):
                 # assert len(input_list) == len(filenames)
                 for m_pred, y_pred, name in \
                         zip(m_pred_list, y_pred_list, filenames):
-                    img_pred = cv.resize(
-                        y_pred, (256, 192), interpolation=cv.INTER_LINEAR)
-                    img_pred = utils.float2uint(img_pred)
+                    # img_pred = cv.resize(
+                    #     y_pred, (256, 192), interpolation=cv.INTER_LINEAR)
+                    img_pred = utils.float2uint(y_pred)
                     cv.imwrite(os.path.join(self.inferd_dir,
                                             "shadowless",
                                             name+".png"), img_pred)
 
-                    matte_pred = cv.resize(
-                        m_pred, (256, 192), interpolation=cv.INTER_LINEAR)
-                    matte_pred = utils.float2uint(matte_pred)
+                    # matte_pred = cv.resize(
+                    #     m_pred, (256, 192), interpolation=cv.INTER_LINEAR)
+                    matte_pred = utils.float2uint(m_pred)
                     cv.imwrite(os.path.join(self.inferd_dir,
                                             "matte",
                                             name+".png"), matte_pred)

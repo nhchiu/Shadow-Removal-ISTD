@@ -19,7 +19,7 @@ http://arxiv.org/abs/1908.08628
 import torch
 import torch.nn as nn
 
-from skip_connection_layer import SkipConnectionLayer
+from src.models.skip_connection_layer import SkipConnectionLayer
 
 
 class MNet(nn.Module):

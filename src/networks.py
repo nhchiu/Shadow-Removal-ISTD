@@ -6,10 +6,10 @@ from enum import Enum, unique
 import torch
 import torch.nn as nn
 
-from models.denseunet import DenseUNet
-from models.mnet import MNet
-from models.patchgan import PatchGAN
-from models.unet import UNet
+from src.models.denseunet import DenseUNet
+from src.models.mnet import MNet
+from src.models.patchgan import PatchGAN
+from src.models.unet import UNet
 
 
 @torch.no_grad()
@@ -38,7 +38,17 @@ class Discriminators(Enum):
     PATCHGAN = PatchGAN
 
 
+@unique
+class Activation(Enum):
+    # "none", "sigmoid", "tanh", "htanh"
+    NONE = None
+    SIGMOID = nn.Sigmoid()
+    TANH = nn.Tanh()
+    HTANH = nn.Hardtanh(min_val=-1.0, max_val=1.0, inplace=True)
+
+
 def get_generator(key: str, *args, **kwargs):
+    kwargs["activation"] = Activation[kwargs["activation"].upper()].value
     return Generators[key.upper()].value(*args, **kwargs)
 
 

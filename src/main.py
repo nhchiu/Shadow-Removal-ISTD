@@ -15,7 +15,7 @@ import numpy as np
 import torch
 import torch.utils.data
 
-from cgan import CGAN
+from src.cgan import CGAN
 
 
 def main(args):
@@ -243,7 +243,8 @@ if __name__ == "__main__":
         type=bool, default=False, const=True, nargs='?')
     parser.add_argument(
         "--activation", help="Activation functin of G",
-        default="none", choices=["none", "sigmoid", "tanh", "htanh"], type=str)
+        default="none", choices=["none", "sigmoid", "tanh", "htanh"],
+        type=str)
     parser.add_argument(
         "--jointly", help="Train NN jointly or seperately.",
         type=bool, default=True, const=True, nargs='?')

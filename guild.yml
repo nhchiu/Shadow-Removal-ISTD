@@ -17,6 +17,7 @@
           default: normal
           choices: [normal, rel, rel_avg]
         NN-upconv: yes
+        activation: sigmoid
         batch-size: 8
         beta1: 0.5
         beta2: 0.999
@@ -36,7 +37,7 @@
         # softadapt: yes
         weights: ./weights
         workers: 4
-      # output-scalars: off
+      output-scalars: off
       # requires:
       #   - dataset
 
@@ -63,7 +64,7 @@
         net-D: patchgan
         net-G: mnet
         workers: 2
-      # output-scalars: off
+      output-scalars: off
       # requires:
       #   - dataset
         # - file: ./weights_lr0.00005_RaLSGAN/MNet_latest.pt
