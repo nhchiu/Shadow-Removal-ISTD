@@ -62,7 +62,7 @@ def uint2float(array):
 
 def float2uint(array):
     assert (array.dtype == np.float32) or (array.dtype == np.float64)
-    return (array * 255).astype(np.uint8)
+    return (np.clip(array, 0, 1) * 255).astype(np.uint8)
 
 
 def normalize_ndarray(array):
