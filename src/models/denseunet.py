@@ -18,6 +18,8 @@ https://github.com/mateuszbuda/brain-segmentation-pytorch
 import torch
 import torch.nn as nn
 
+from src.models.skip_connection_layer import SkipConnectionLayer
+
 
 class DenseUNet(nn.Module):
 
@@ -30,72 +32,42 @@ class DenseUNet(nn.Module):
                  activation=None, **kwargs):
         super(DenseUNet, self).__init__()
         depth = 5
-        default_layers = 2
-        growth_rate = ngf // default_layers
+        n_composite_layers = 2
+        growth_rate = ngf // n_composite_layers
 
-        self.in_conv = nn.Conv2d(in_channels=in_channels,
-                                 out_channels=ngf,
-                                 kernel_size=1,
-                                 stride=1,
-                                 padding=0,
-                                 bias=False)
+        in_conv = nn.Conv2d(in_channels=in_channels,
+                            out_channels=ngf,
+                            kernel_size=1,
+                            stride=1,
+                            padding=0,
+                            bias=False)
 
-        self.DenseBlockEncoders = nn.ModuleDict([
-            (f"DBEncoder{i}", DenseUNet._dense_block(ngf,
-                                                     layers=default_layers,
-                                                     growth_rate=growth_rate,
-                                                     drop_rate=drop_rate))
-            for i in range(depth)
-        ])
+        block = DenseUNet._bottleneck(
+            ngf, layers=3*n_composite_layers, growth_rate=growth_rate)
 
-        self.TransDowns = nn.ModuleDict([
-            (f"TD{i}", DenseUNet._trans_down(
-                2*ngf, ngf, drop_rate=drop_rate))
-            for i in range(depth)
-        ])
+        for i in reversed(range(depth)):
+            block = SkipConnectionLayer(
+                _conv_block(ngf, n_composite_layers, growth_rate),
+                _up_block(ngf*4, ngf*2, n_composite_layers,
+                          growth_rate, no_conv_t),
+                submodule=block,
+                drop_rate=drop_rate if i > 0 else 0)
 
-        self.bottleneck = DenseUNet._bottleneck(
-            ngf, layers=default_layers, growth_rate=growth_rate)
+        out_conv = nn.Conv2d(in_channels=4*ngf,
+                             out_channels=out_channels,
+                             kernel_size=1,
+                             stride=1,
+                             bias=False)
 
-        self.TransUps = nn.ModuleDict(
-            [
-                (f"TU{depth-1}", DenseUNet._trans_up(2*ngf, ngf, no_conv_t))
-            ]+[
-                (f"TU{i}", DenseUNet._trans_up(4*ngf, ngf, no_conv_t))
-                for i in reversed(range(depth-1))
-            ])
+        sequence = [in_conv, block, out_conv]
+        if activation is not None:
+            assert isinstance(activation, nn.Module)
+            sequence.append(activation)
 
-        self.DenseBlockDecoders = nn.ModuleDict([
-            (f"DBDecoder{i}", DenseUNet._dense_block(
-                3 * ngf, layers=default_layers, growth_rate=growth_rate))
-            for i in reversed(range(depth))
-        ])
-
-        self.out_conv = nn.Conv2d(in_channels=4*ngf,
-                                  out_channels=out_channels,
-                                  kernel_size=1,
-                                  stride=1,
-                                  bias=False)
+        self.model = nn.Sequential(*sequence)
 
     def forward(self, x):
-        x = self.in_conv(x)
-        # encode
-        links = []
-        for denseblock, trans_down in zip(self.DenseBlockEncoders.values(),
-                                          self.TransDowns.values()):
-            x = denseblock(x)
-            links.append(x)
-            x = trans_down(x)
-
-        x = self.bottleneck(x)
-        # decode
-        for denseblock, trans_up in zip(self.DenseBlockDecoders.values(),
-                                        self.TransUps.values()):
-            x = trans_up(x)
-            x = torch.cat((x, links.pop()), dim=1)
-            x = denseblock(x)
-
-        return self.out_conv(x)
+        return self.model(x)
 
     @staticmethod
     def _trans_down(in_channels, out_channels=None, drop_rate=0.01):
@@ -176,3 +148,36 @@ class DenseUNet(nn.Module):
             if drop_rate > 0:
                 layer.append(nn.Dropout2d(p=drop_rate, inplace=True))
             return nn.Sequential(*layer)
+
+
+class _conv_block(nn.Module):
+    def __init__(self, in_channels, layers, growth_rate):
+        super().__init__()
+        self.dense_block = DenseUNet._dense_block(in_channels,
+                                                  layers=layers,
+                                                  growth_rate=growth_rate,
+                                                  drop_rate=0)
+        self.trans_down = DenseUNet._trans_down(
+            in_channels+layers*growth_rate, in_channels, drop_rate=0)
+
+    def forward(self, x):
+        link = self.dense_block(x)
+        return self.trans_down(link), link
+
+
+class _up_block(nn.Module):
+    def __init__(self, in_channels, link_channels, layers, growth_rate,
+                 no_conv_t=False):
+        super().__init__()
+        tu_out_channels = link_channels - layers * growth_rate
+        self.trans_up = DenseUNet._trans_up(in_channels,
+                                            tu_out_channels,
+                                            no_conv_t)
+        self.dense_block = DenseUNet._dense_block(
+            tu_out_channels+link_channels,
+            layers=layers,
+            growth_rate=growth_rate,
+            drop_rate=0)
+
+    def forward(self, x, link):
+        return self.dense_block(torch.cat((self.trans_up(x), link), dim=1))
