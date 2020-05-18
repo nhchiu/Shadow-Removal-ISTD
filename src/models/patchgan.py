@@ -5,13 +5,15 @@
 https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix
 @inproceedings{isola2017image,
   title={Image-to-Image Translation with Conditional Adversarial Networks},
-  author={Isola, Phillip and Zhu, Jun-Yan and Zhou, Tinghui and Efros, Alexei A},
-  booktitle={Computer Vision and Pattern Recognition (CVPR), 2017 IEEE Conference on},
+  author={Isola, Phillip and Zhu, Jun-Yan and Zhou,
+          Tinghui and Efros, Alexei A},
+  booktitle={Computer Vision and Pattern Recognition (CVPR),
+             2017 IEEE Conference on},
   year={2017}
 }
 """
 
-import torch
+# import torch
 import torch.nn as nn
 
 
@@ -32,7 +34,7 @@ class PatchGAN(nn.Module):
                     nn.LeakyReLU(0.2, inplace=True)]
         # (N, ndf, H/2, W/2)
         prev_channels = ndf
-        for n in range(1, n_layers):  # gradually increase the number of filters
+        for n in range(1, n_layers):  # increasing the number of filters
             if n < 4:
                 sequence.extend(self._block(prev_channels, prev_channels*2))
                 prev_channels *= 2

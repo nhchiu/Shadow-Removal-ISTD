@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 import torchvision.models as models
-from dataset import ISTDDataset
+# from src.dataset import ISTDDataset
 
 
 class DataLoss(nn.Module):
@@ -39,19 +39,17 @@ class VisualLoss(nn.Module):
         self.norm = norm
         VGG19 = models.vgg19_bn(pretrained=True, progress=False)
         self.VGG = VGG19.features[:40].requires_grad_(False)
-        self.register_buffer(
-            'mean',
-            torch.tensor(ISTDDataset.mean).reshape((3, 1, 1)))
-        self.register_buffer(
-            'std',
-            torch.tensor(ISTDDataset.std).reshape((3, 1, 1)))
+        # self.register_buffer(
+        #     'mean',
+        #     torch.tensor(ISTDDataset.mean).reshape((3, 1, 1)))
+        # self.register_buffer(
+        #     'std',
+        #     torch.tensor(ISTDDataset.std).reshape((3, 1, 1)))
 
-    def forward(self, x, y_pred, img_target):
-        img_in = x.mul(self.std).add(self.mean)
-        img_pred = y_pred.mul(img_in).clamp_(0, 1)
-        feature_pred = self.VGG(img_pred)
+    def forward(self, y_pred, y_target):
+        feature_pred = self.VGG(y_pred)
         with torch.no_grad():
-            feature_target = self.VGG(img_target)
+            feature_target = self.VGG(y_target)
         return self.norm(feature_pred, feature_target,
                          reduction=self.reduction)
 

@@ -28,9 +28,11 @@ def get_sp(shadowed, shadowless, ksize: int = 5, deg: int = 1):
     # sp = np.ones((shadow.shape[0], shadow.shape[1],
     #               3, (deg+1)), dtype=np.float32)
     # weight_distance = np.array([ksize-np.abs(i-border)-np.abs(j-border)
-    #                             for i in range(ksize) for j in range(ksize)], dtype=np.int)
+    #                             for i in range(ksize) for j in range(ksize)],
+    #                             dtype=np.int)
 
-    # a = [(deg, ksize, r, c, channel, bordered_shadow, bordered_shadow_free, weight_gray, weight_distance)
+    # a = [(deg, ksize, r, c, channel, bordered_shadow, bordered_shadow_free,
+    #       weight_gray, weight_distance)
     #      for r in range(shadow.shape[0])
     #      for c in range(shadow.shape[1])
     #      for channel in range(3)]

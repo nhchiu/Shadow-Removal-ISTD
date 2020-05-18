@@ -14,7 +14,7 @@
           default: leastsquare
           choices: [standard, leastsquare]
         D-loss-type:
-          default: normal
+          default: rel_avg
           choices: [normal, rel, rel_avg]
         NN-upconv: yes
         activation: sigmoid

@@ -19,7 +19,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from skip_connection_layer import SkipConnectionLayer
+from src.models.skip_connection_layer import SkipConnectionLayer
 
 
 class UNet(nn.Module):
