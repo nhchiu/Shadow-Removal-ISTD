@@ -78,12 +78,16 @@ class CGAN(object):
         self.optim_D = optim.Adam(
             list(self.D1.parameters())+list(self.D2.parameters()),
             lr=args.lr_D, betas=(args.beta1, args.beta2))
-        self.decay_G = optim.lr_scheduler.ReduceLROnPlateau(
-            self.optim_G,
-            cooldown=10, min_lr=1e-7, factor=0.8, verbose=True)
-        self.decay_D = optim.lr_scheduler.ReduceLROnPlateau(
-            self.optim_D,
-            cooldown=10, min_lr=1e-7, factor=0.8, verbose=True)
+        # self.decay_G = optim.lr_scheduler.ReduceLROnPlateau(
+        #     self.optim_G,
+        #     cooldown=10, min_lr=1e-7, factor=0.8, verbose=True)
+        # self.decay_D = optim.lr_scheduler.ReduceLROnPlateau(
+        #     self.optim_D,
+        #     cooldown=10, min_lr=1e-7, factor=0.8, verbose=True)
+        self.decay_G = optim.lr_scheduler.ExponentialLR(
+            self.optim_G, gamma=(1-args.decay), last_epoch=-1)
+        self.decay_D = optim.lr_scheduler.ExponentialLR(
+            self.optim_D, gamma=(1-args.decay), last_epoch=-1)
 
         # data loaders
         self.logger.info("Creating data loaders")

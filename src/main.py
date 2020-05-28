@@ -128,17 +128,17 @@ if __name__ == "__main__":
     parser.add_argument(
         "--lr-D",
         help="initial learning rate of discriminator (default: %(default).5f)",
-        default=0.0002, type=float,)
+        default=0.0001, type=float,)
     parser.add_argument(
         "--lr-G",
         help="initial learning rate of generator (default: %(default).5f)",
         default=0.0005, type=float,)
     parser.add_argument(
         "--decay",
-        help=("Decay to apply to lr each cycle. (default: %(default).6f)"
+        help=("Decay to apply to lr each cycle. (default: %(default).5f)"
               "(1-decay)^n_iter * lr gives the final lr. "
-              "e.g. 0.00002 will lead to .13 of lr after 100k cycles"),
-        default=0.00005, type=float)
+              "e.g. 0.003 will lead to .05 of lr after 1k cycles"),
+        default=0.003, type=float)
     parser.add_argument(
         "--workers",
         help="number of workers for data loading (default: %(default)d)",
