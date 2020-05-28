@@ -65,10 +65,10 @@ class STCGAN(object):
             lr=args.lr_D, betas=(args.beta1, args.beta2))
         self.decay_G = optim.lr_scheduler.ReduceLROnPlateau(
             self.optim_G,
-            cooldown=10, min_lr=1e-6, factor=0.8, verbose=True)
+            cooldown=10, min_lr=1e-7, factor=0.8, verbose=True)
         self.decay_D = optim.lr_scheduler.ReduceLROnPlateau(
             self.optim_D,
-            cooldown=10, min_lr=1e-6, factor=0.8, verbose=True)
+            cooldown=10, min_lr=1e-7, factor=0.8, verbose=True)
 
         # data loaders
         self.logger.info("Creating data loaders")
