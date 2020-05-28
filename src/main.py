@@ -158,7 +158,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--data-dir",
         help="root folder with images (default: %(default)s)",
-        default="../ISTD_DATASET", type=str,)
+        default="../ISTD_DATASET", )
+    parser.add_argument(
+        "--data-dir2",
+        help="root folder with images (default: %(default)s)",
+        default="", )
     parser.add_argument(
         "--image-size",
         help="target input image size (default: %(default)d)",
@@ -243,7 +247,7 @@ if __name__ == "__main__":
         type=bool, default=False, const=True, nargs='?')
     parser.add_argument(
         "--activation", help="Activation functin of G",
-        default="none", choices=["none", "sigmoid", "tanh", "htanh"],
+        default="sigmoid", choices=["none", "sigmoid", "tanh", "htanh"],
         type=str)
     parser.add_argument(
         "--jointly", help="Train NN jointly or seperately.",

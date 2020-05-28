@@ -35,14 +35,14 @@ class CGAN(object):
             args.net_G,
             in_channels=3,
             out_channels=1,
-            ngf=64,
+            ngf=48,
             drop_rate=0.1,
             no_conv_t=args.NN_upconv,
             activation=args.activation,)
         self.G2 = networks.get_generator(
             args.net_G,
             in_channels=3+1,
-            out_channels=3, ngf=64,
+            out_channels=3, ngf=48,
             drop_rate=0.1,
             no_conv_t=args.NN_upconv,
             activation=args.activation,)
@@ -91,7 +91,15 @@ class CGAN(object):
 
         # data loaders
         self.logger.info("Creating data loaders")
-        train_dataset = ISTDDataset(args.data_dir, subset="train",
+        assert os.path.isdir(args.data_dir)
+        if args.data_dir2:
+            assert os.path.isdir(args.data_dir2)
+            data_dir2 = args.data_dir2
+        else:
+            data_dir2 = None
+        train_dataset = ISTDDataset(args.data_dir,
+                                    root_dir2=data_dir2,
+                                    subset="train",
                                     datas=["img", "target", "matte"],
                                     transforms=transform.transforms(
                                         # resize=(300, 400),
@@ -100,7 +108,9 @@ class CGAN(object):
                                         flip_prob=0.5,
                                         crop_size=args.image_size),
                                     preload=False)
-        valid_dataset = ISTDDataset(args.data_dir, subset="test",
+        valid_dataset = ISTDDataset(args.data_dir,
+                                    root_dir2=data_dir2,
+                                    subset="test",
                                     datas=["img", "target", "matte"],
                                     # transforms=transform.transforms(
                                     #     resize=(256, 256)),
@@ -344,8 +354,8 @@ class CGAN(object):
                 loss["vis2"] += vis2_loss.item()
                 loss["G"] += G_loss.item()
         if training:
-            self.decay_G.step(loss["G"])
-            self.decay_D.step(loss["D"])
+            self.decay_G.step()
+            self.decay_D.step()
         torch.cuda.empty_cache()
         # return metrics
         n_batches = len(data_loader)
@@ -369,6 +379,8 @@ class CGAN(object):
             self.G1.eval()
             self.G2.eval()
             data_loader = self.valid_loader
+            assert os.path.isdir(os.path.join(self.inferd_dir, "shadowless"))
+            assert os.path.isdir(os.path.join(self.inferd_dir, "matte"))
             # normalization = transform.Normalize(
             #     ISTDDataset.mean, ISTDDataset.std)
             for (filenames, x, _, _) in tqdm(data_loader,
