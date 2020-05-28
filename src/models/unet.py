@@ -22,6 +22,27 @@ import torch.nn.functional as F
 from src.models.skip_connection_layer import SkipConnectionLayer
 
 
+def conv_block(in_channels, features):
+    return [nn.Conv2d(in_channels=in_channels,
+                      out_channels=features,
+                      kernel_size=3,
+                      stride=1,
+                      padding=1,
+                      padding_mode='reflect',
+                      bias=False,),
+            nn.LeakyReLU(negative_slope=0.2, inplace=True),
+            nn.BatchNorm2d(num_features=features),
+            nn.Conv2d(in_channels=features,
+                      out_channels=features,
+                      kernel_size=3,
+                      stride=1,
+                      padding=1,
+                      padding_mode='reflect',
+                      bias=False,),
+            nn.LeakyReLU(negative_slope=0.2, inplace=True),
+            nn.BatchNorm2d(num_features=features)]
+
+
 class UNet(nn.Module):
 
     def __init__(self,
@@ -34,25 +55,7 @@ class UNet(nn.Module):
         super(UNet, self).__init__()
         depth = 4
 
-        block = nn.Sequential(
-            nn.Conv2d(in_channels=ngf*(2**(depth-1)),
-                      out_channels=ngf*(2**depth),
-                      kernel_size=3,
-                      stride=1,
-                      padding=1,
-                      padding_mode='reflect',
-                      bias=False,),
-            nn.LeakyReLU(negative_slope=0.2, inplace=True),
-            nn.BatchNorm2d(num_features=ngf*(2**depth)),
-            nn.Conv2d(in_channels=ngf*(2**depth),
-                      out_channels=ngf*(2**depth),
-                      kernel_size=3,
-                      stride=1,
-                      padding=1,
-                      padding_mode='reflect',
-                      bias=False,),
-            nn.LeakyReLU(negative_slope=0.2, inplace=True),
-            nn.BatchNorm2d(num_features=ngf*(2**depth)))
+        block = nn.Sequential(*conv_block(ngf*(2**(depth-1)), ngf*(2**depth)))
 
         for i in reversed(range(1, depth)):
             block = SkipConnectionLayer(_conv_block(ngf*(2**(i-1)),
@@ -83,25 +86,7 @@ class UNet(nn.Module):
 class _conv_block(nn.Module):
     def __init__(self, in_channels, features):
         super().__init__()
-        sequence = [nn.Conv2d(in_channels=in_channels,
-                              out_channels=features,
-                              kernel_size=3,
-                              stride=1,
-                              padding=1,
-                              padding_mode='reflect',
-                              bias=False,),
-                    nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                    nn.BatchNorm2d(num_features=features),
-                    nn.Conv2d(in_channels=features,
-                              out_channels=features,
-                              kernel_size=3,
-                              stride=1,
-                              padding=1,
-                              padding_mode='reflect',
-                              bias=False,),
-                    nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                    nn.BatchNorm2d(num_features=features)]
-        self.block = nn.Sequential(*sequence)
+        self.block = nn.Sequential(*conv_block(in_channels, features))
 
     def forward(self, x):
         out = self.block(x)
@@ -117,25 +102,7 @@ class _up_block(nn.Module):
             kernel_size=2,
             stride=2,
             bias=False)
-        self.conv_block = nn.Sequential(
-            nn.Conv2d(in_channels=2*features,
-                      out_channels=features,
-                      kernel_size=3,
-                      stride=1,
-                      padding=1,
-                      padding_mode='reflect',
-                      bias=False,),
-            nn.LeakyReLU(negative_slope=0.2, inplace=True),
-            nn.BatchNorm2d(num_features=features),
-            nn.Conv2d(in_channels=features,
-                      out_channels=features,
-                      kernel_size=3,
-                      stride=1,
-                      padding=1,
-                      padding_mode='reflect',
-                      bias=False,),
-            nn.LeakyReLU(negative_slope=0.2, inplace=True),
-            nn.BatchNorm2d(num_features=features))
+        self.conv_block = nn.Sequential(*conv_block(2*features, features))
 
     def forward(self, x, link):
         x = self.up_conv(x)
