@@ -73,12 +73,8 @@ class AdversarialLoss(nn.Module):
 
     def __init__(self, ls=False, rel=False, avg=False):
         super().__init__()
-        if not ls:
-            self.register_buffer('real_label', torch.tensor(1.0))
-            self.register_buffer('fake_label', torch.tensor(0.0))
-        else:
-            self.register_buffer('real_label', torch.tensor(1.0))
-            self.register_buffer('fake_label', torch.tensor(-1.0))
+        self.register_buffer('real_label', torch.tensor(1.0))
+        self.register_buffer('fake_label', torch.tensor(0.0))
         self.ls = ls
         self.rel = rel
         self.avg = avg
