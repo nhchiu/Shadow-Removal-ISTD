@@ -35,14 +35,14 @@ class CGAN(object):
             args.net_G,
             in_channels=3,
             out_channels=1,
-            ngf=48,
+            ngf=64,
             drop_rate=0.1,
             no_conv_t=args.NN_upconv,
             activation=args.activation,)
         self.G2 = networks.get_generator(
             args.net_G,
             in_channels=3+1,
-            out_channels=3, ngf=48,
+            out_channels=3, ngf=64,
             drop_rate=0.1,
             no_conv_t=args.NN_upconv,
             activation=args.activation,)
@@ -459,23 +459,15 @@ class CGAN(object):
             state_dict = torch.load(g1_weights, map_location=self.device)
             self.G1.load_state_dict(state_dict)
             self.logger.info(f"Loaded G1 weights: {g1_weights}")
-        else:
-            self.G1.apply(networks.weights_init)
         if g2_weights:
             state_dict = torch.load(g2_weights, map_location=self.device)
             self.G2.load_state_dict(state_dict)
             self.logger.info(f"Loaded G2 weights: {g2_weights}")
-        else:
-            self.G2.apply(networks.weights_init)
         if d1_weights:
             state_dict = torch.load(d1_weights, map_location=self.device)
             self.D1.load_state_dict(state_dict)
             self.logger.info(f"Loaded D1 weights: {d1_weights}")
-        else:
-            self.D1.apply(networks.weights_init)
         if d2_weights:
             state_dict = torch.load(d2_weights, map_location=self.device)
             self.D2.load_state_dict(state_dict)
             self.logger.info(f"Loaded D2 weights: {d2_weights}")
-        else:
-            self.D2.apply(networks.weights_init)
