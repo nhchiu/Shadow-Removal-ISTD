@@ -35,25 +35,25 @@ class CGAN(object):
             args.net_G,
             in_channels=3,
             out_channels=1,
-            ngf=64,
-            drop_rate=0.1,
+            ngf=args.ngf,
+            drop_rate=args.droprate,
             no_conv_t=args.NN_upconv,
             activation=args.activation,)
         self.G2 = networks.get_generator(
             args.net_G,
             in_channels=3+1,
-            out_channels=3, ngf=64,
-            drop_rate=0.1,
+            ngf=args.ngf,
+            drop_rate=args.droprate,
             no_conv_t=args.NN_upconv,
             activation=args.activation,)
         self.D1 = networks.get_discriminator(
             args.net_D,
             in_channels=3+1,
-            ndf=64, n_layers=3, use_sigmoid=False)
+            ndf=args.ndf,  # n_layers=3,
         self.D2 = networks.get_discriminator(
             args.net_D,
             in_channels=3+3+1,
-            ndf=64, n_layers=3, use_sigmoid=False)
+            ndf=args.ndf,  # n_layers=3,
         if "infer" in args.tasks and "train" not in args.tasks:
             assert args.load_weights_g1 is not None
             assert args.load_weights_g2 is not None
@@ -137,10 +137,12 @@ class CGAN(object):
         # loss
         if "train" in args.tasks:
             self.logger.info("Creating loss functions")
-            self.d_loss_fn = args.D_loss_fn
-            self.d_loss_type = args.D_loss_type
+            # self.d_loss_fn = args.D_loss_fn
+            # self.d_loss_type = args.D_loss_type
             self.adv_loss = AdversarialLoss(
-                ls=(args.D_loss_fn == "leastsqure"))
+                ls=(args.D_loss_fn == "leastsqure"),
+                rel=("rel" in args.D_type),
+                avg=("avg" in args.D_type))
             self.adv_loss.to(self.device, non_blocking=True)
 
             self.data_loss = DataLoss().to(self.device)

@@ -78,9 +78,9 @@ def set_manual_seed(manual_seed):
 
 def makedirs(args):
     arg_str = f"_lr{args.lr_G:.5f}_"
-    if args.D_loss_type == "normal":
+    if args.D_type == "normal":
         arg_str += ""
-    elif args.D_loss_type == "rel":
+    elif args.D_type == "rel":
         arg_str += "Rp"
     else:
         arg_str += "Ra"
@@ -105,6 +105,10 @@ def snapshotargs(args, filename="args.json"):
         json.dump(vars(args), fp, indent=4, sort_keys=True)
 
 
+def str2bool(v):
+    return v.lower() in ("yes", "true", "t", "y", "1")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Training U-Net model for shadow removal"
@@ -126,43 +130,17 @@ if __name__ == "__main__":
         help="number of epochs to train (default: %(default)d)",
         default=100000, type=int,)
     parser.add_argument(
-        "--lr-D",
-        help="initial learning rate of discriminator (default: %(default).5f)",
-        default=0.0001, type=float,)
-    parser.add_argument(
-        "--lr-G",
-        help="initial learning rate of generator (default: %(default).5f)",
-        default=0.0005, type=float,)
-    parser.add_argument(
-        "--decay",
-        help=("Decay to apply to lr each cycle. (default: %(default).5f)"
-              "(1-decay)^n_iter * lr gives the final lr. "
-              "e.g. 0.003 will lead to .05 of lr after 1k cycles"),
-        default=0.003, type=float)
-    parser.add_argument(
-        "--workers",
-        help="number of workers for data loading (default: %(default)d)",
-        default=4, type=int,)
-    parser.add_argument(
-        "--weights",
-        help="folder to save weights (default: %(default)s)",
-        default="../weights", type=str,)
-    parser.add_argument(
-        "--infered",
-        help="folder to save infered images (default: %(default)s)",
-        default="../infered", type=str,)
-    parser.add_argument(
-        "--logs",
-        help="folder to save logs (default: %(default)s)",
-        default="../logs", type=str,)
-    parser.add_argument(
         "--data-dir",
         help="root folder with images (default: %(default)s)",
-        default="../ISTD_DATASET", )
+        default="", )
     parser.add_argument(
         "--data-dir2",
         help="root folder with images (default: %(default)s)",
         default="", )
+    parser.add_argument(
+        "--workers",
+        help="number of workers for data loading (default: %(default)d)",
+        default=4, type=int,)
     parser.add_argument(
         "--image-size",
         help="target input image size (default: %(default)d)",
@@ -180,11 +158,50 @@ if __name__ == "__main__":
     parser.add_argument(
         "--net-G",
         help="the generator model (default: %(default)s)",
-        default="mnet", choices=["unet", "mnet", "denseunet"], type=str,)
+        default="mnet", choices=["unet", "mnet", "denseunet"])
     parser.add_argument(
         "--net-D",
         help="the discriminator model (default: %(default)s)",
-        default="patchgan", choices=["patchgan"], type=str,)
+        default="patchgan", choices=["patchgan", "began"])
+    parser.add_argument(
+        "--ngf",
+        help=("initial number of features in G (default: %(default)d)"),
+        default=64, type=int,)
+    parser.add_argument(
+        "--ndf",
+        help=("initial number of features in D (default: %(default)d)"),
+        default=64, type=int,)
+    parser.add_argument(
+        "--droprate",
+        help="Dropout rate (default: %(default).3f)",
+        default=0.05, type=float,)
+    parser.add_argument(
+        "--lr-D",
+        help="initial learning rate of discriminator (default: %(default).5f)",
+        default=0.0001, type=float,)
+    parser.add_argument(
+        "--lr-G",
+        help="initial learning rate of generator (default: %(default).5f)",
+        default=0.0005, type=float,)
+    parser.add_argument(
+        "--decay",
+        help=("Decay to apply to lr each cycle. (default: %(default).5f)"
+              "(1-decay)^n_iter * lr gives the final lr. "
+              "e.g. 0.003 will lead to .05 of lr after 1k cycles"),
+        default=0.003, type=float)
+    parser.add_argument(
+        "--beta1",
+        help=("Adam betas[0], (default: %(default).2f) "
+              "DCGAN paper recommends .5 instead of the usual .9"),
+        default=0.5, type=float)
+    parser.add_argument(
+        "--beta2",
+        help="Adam betas[1] (default: %(default).4f) ",
+        default=0.999, type=float)
+    parser.add_argument(
+        "--manual_seed",
+        help="manual random seed (default: %(default)s)",
+        default=38107943, type=int)
     parser.add_argument(
         "--load-weights-g1",
         help="load weights to continue training (default: %(default)s)",
@@ -204,33 +221,20 @@ if __name__ == "__main__":
     parser.add_argument(
         "--D-loss-fn",
         help="loss funtion of discriminator (default: %(default)s)",
-        default="standard", choices=["standard", "leastsquare"], type=str)
+        default="standard", choices=["standard", "leastsquare"])
     parser.add_argument(
-        "--D-loss-type",
+        "--D-type",
         help="Use relative discriminator loss (default: %(default)s)",
-        default="normal", choices=["normal", "rel", "rel_avg"], type=str)
+        default="normal", choices=["normal", "rel", "rel_avg"])
     parser.add_argument(
         "--softadapt", help="Adapt the weight of losses dynamically",
-        type=bool, default=False, const=True, nargs='?')
-    parser.add_argument(
-        "--manual_seed",
-        help="manual random seed (default: %(default)s)",
-        default=38107943, type=int)
+        default=False, const=True, nargs='?', type=str2bool)
     parser.add_argument(
         "--SELU",
         help=("Using scaled exponential linear units (SELU) "
               "which are self-normalizing instead of ReLU with BatchNorm. "
               "Used only in arch=0. This improves stability."),
-        default=False, type=bool,)
-    parser.add_argument(
-        "--beta1",
-        help=("Adam betas[0], (default: %(default).2f) "
-              "DCGAN paper recommends .5 instead of the usual .9"),
-        default=0.5, type=float)
-    parser.add_argument(
-        "--beta2",
-        help="Adam betas[1] (default: %(default).4f) ",
-        default=0.999, type=float)
+        default=False, const=True, nargs='?', type=str2bool)
     parser.add_argument(
         "--NN-upconv", help=("This approach minimize checkerboard artifacts "
                              "during training. Used only by arch=0. Uses "
@@ -238,29 +242,38 @@ if __name__ == "__main__":
                              "of strided convolutions "
                              "(https://distill.pub/2016/deconv-checkerboard/ "
                              "and github.com/abhiskk/fast-neural-style)."),
-        type=bool, default=False, const=True, nargs='?')
-    parser.add_argument(
-        "--no-batch-norm-G", help="If True, no batch norm in G.",
-        type=bool, default=False, const=True, nargs='?')
-    parser.add_argument(
-        "--no-batch-norm-D", help="If True, no batch norm in D.",
-        type=bool, default=False, const=True, nargs='?')
+        type=str2bool, default=False, const=True, nargs='?')
+    # parser.add_argument(
+    #     "--no-batch-norm-G", help="If True, no batch norm in G.",
+    #     type=str2bool, default=False, const=True, nargs='?')
+    # parser.add_argument(
+    #     "--no-batch-norm-D", help="If True, no batch norm in D.",
+    #     type=str2bool, default=False, const=True, nargs='?')
     parser.add_argument(
         "--activation", help="Activation functin of G",
-        default="sigmoid", choices=["none", "sigmoid", "tanh", "htanh"],
-        type=str)
+        default="tanh", choices=["none", "sigmoid", "tanh", "htanh"])
     parser.add_argument(
         "--jointly", help="Train NN jointly or seperately.",
-        type=bool, default=True, const=True, nargs='?')
+        type=str2bool, default=True, const=True, nargs='?')
     parser.add_argument(
         "--log-every",
-        help=("log to tensorboard"
-              "(default: %(default)d)"),
+        help="log interval to tensorboard (default: %(default)d)",
         default=3, type=int,)
     parser.add_argument(
         "--valid-every",
-        help=("validation"
-              "(default: %(default)d)"),
+        help="validation interval (default: %(default)d)",
         default=10, type=int,)
+    parser.add_argument(
+        "--weights",
+        help="folder to save weights (default: %(default)s)",
+        default="./weights",)
+    parser.add_argument(
+        "--infered",
+        help="folder to save infered images (default: %(default)s)",
+        default="./infered",)
+    parser.add_argument(
+        "--logs",
+        help="folder to save logs (default: %(default)s)",
+        default="./logs",)
     args = parser.parse_args()
     main(args)

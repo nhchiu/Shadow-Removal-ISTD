@@ -2,27 +2,27 @@
   operations:
     train:
       plugins: [cpu, gpu, memory]
-      main: src/main
+      main: src.main
       label: ${tasks}_${D-loss-fn}_${D-loss-type}_${net-D}-${net-G}
       sourcecode:
         select:
-          - 'src/*'
+          - "src/*"
       flags-dest: args
       flags:
         tasks: train
         D-loss-fn:
           default: leastsquare
           choices: [standard, leastsquare]
-        D-loss-type:
+        D-type:
           default: rel_avg
           choices: [normal, rel, rel_avg]
         NN-upconv: yes
-        activation: sigmoid
-        batch-size: 8
+        activation: tanh
+        batch-size: 4
         beta1: 0.5
         beta2: 0.999
-        data-dir: ./ISTD_Dataset.hdf5
-        decay: 5.0e-05
+        data-dir: /home/nathan/ISTD
+        decay:
         devices: cuda
         epochs: 2000
         logs: ./logs
@@ -33,27 +33,30 @@
           default:
           type: float
         net-D: patchgan
-        net-G: mnet
+        net-G: unet
+        ngf: 64
+        ndf: 64
         # softadapt: yes
         weights: ./weights
         workers: 4
+        # SELU: true
       output-scalars: off
       # requires:
       #   - dataset
 
     infer:
-      main: src/main
+      main: src.main
       label: ${tasks}_${net-D}-${net-G}
       plugins: [cpu, gpu, memory]
       sourcecode:
         select:
-          - 'src/*'
+          - "src/*"
       flags-dest: args
       flags:
         tasks: infer
         NN-upconv: yes
         batch-size: 2
-        data-dir: ./ISTD_Dataset.hdf5
+        data-dir: /home/nathan/ISTD
         devices: cuda
         infered: ./infered
         load-weights-g1:
@@ -62,12 +65,14 @@
           required: yes
         logs: ./logs
         net-D: patchgan
-        net-G: mnet
+        net-G: unet
+        ngf: 64
+        ndf: 64
         workers: 2
       output-scalars: off
       # requires:
       #   - dataset
-        # - file: ./weights_lr0.00005_RaLSGAN/MNet_latest.pt
+      # - file: ./weights_lr0.00005_RaLSGAN/MNet_latest.pt
 
 - model: STCGAN
   operations:
@@ -77,7 +82,7 @@
       label: ${tasks}_${D-loss-fn}_${D-loss-type}
       sourcecode:
         select:
-          - 'STCGAN/*'
+          - "STCGAN/*"
       flags-dest: args
       flags:
         tasks: train
@@ -119,7 +124,7 @@
       plugins: [cpu, gpu, memory]
       sourcecode:
         select:
-          - 'STCGAN/*'
+          - "STCGAN/*"
       flags-dest: args
       flags:
         tasks: infer
@@ -137,7 +142,6 @@
       output-scalars: off
       # requires:
       #   - dataset
-
   # resources:
   #   dataset:
-    # - file: ./ISTD_DATASET
+  # - file: ./ISTD_DATASET
