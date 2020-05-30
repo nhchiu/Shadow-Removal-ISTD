@@ -4,6 +4,8 @@
 
 import torch.nn as nn
 
+from src.models import opt_layers
+
 
 class SkipConnectionLayer(nn.Module):
     """
@@ -14,6 +16,7 @@ class SkipConnectionLayer(nn.Module):
 
     def __init__(self, down_block, up_block,
                  submodule=None,
+                 use_selu=False,
                  drop_rate=0,):
         """Construct a Unet submodule with skip connections.
         Parameters:
@@ -24,9 +27,10 @@ class SkipConnectionLayer(nn.Module):
         """
         super().__init__()
         self.downsample = down_block
-        self.upsample = up_block
         self.submodule = submodule
-        self.dropout = nn.Dropout2d(p=drop_rate) if drop_rate > 0 else None
+        self.upsample = up_block
+        self.dropout = opt_layers.get_dropout(use_selu=use_selu,
+                                              drop_rate=drop_rate)
 
     def forward(self, x):
         y, link = self.downsample(x)

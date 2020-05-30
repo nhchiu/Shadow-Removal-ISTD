@@ -10,8 +10,6 @@ import torchvision.models as models
 import torchvision.transforms as transforms
 from torch.nn import functional as F
 
-# from src.dataset import ISTDDataset
-
 
 class DataLoss(nn.Module):
     """
@@ -43,12 +41,6 @@ class VisualLoss(nn.Module):
         self.VGG = VGG19.features[:40].requires_grad_(False)
         self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                               std=[0.229, 0.224, 0.225])
-        # self.register_buffer(
-        #     'mean',
-        #     torch.tensor(ISTDDataset.mean).reshape((3, 1, 1)))
-        # self.register_buffer(
-        #     'std',
-        #     torch.tensor(ISTDDataset.std).reshape((3, 1, 1)))
 
     def forward(self, y_pred, y_target):
         y_pred = y_pred*0.5+0.5
@@ -76,18 +68,48 @@ class AdversarialLoss(nn.Module):
     def __init__(self, ls=False, rel=False, avg=False):
         super().__init__()
         self.register_buffer('real_label', torch.tensor(1.0))
-        self.register_buffer('fake_label', torch.tensor(0.0))
+        if ls:
+            self.register_buffer('fake_label', torch.tensor(-1.0))
+        else:
+            self.register_buffer('fake_label', torch.tensor(0.0))
         self.ls = ls
         self.rel = rel
         self.avg = avg
 
-    def forward(self, D_out, is_real):
-        target = self.real_label if is_real else self.fake_label
-        target = target.expand_as(D_out)
+    def cal_loss(self, C_out, label):
         if not self.ls:
-            return F.mse_loss(D_out, target)
+            return F.mse_loss(C_out, label.expand_as(C_out))
         else:
-            return F.binary_cross_entropy_with_logits(D_out, target)
+            return F.binary_cross_entropy_with_logits(
+                C_out, label.expand_as(C_out))
+
+    def forward(self, C_real, C_fake, D_loss=True):
+        if D_loss:
+            if self.rel:
+                if self.avg:  # RaGAN
+                    loss_real = self.cal_loss(C_real - C_fake.mean(dim=0),
+                                              self.real_label)
+                    loss_fake = self.cal_loss(C_fake - C_real.mean(dim=0),
+                                              self.fake_label)
+                    return (loss_real + loss_fake) * 0.5
+                else:  # RpGAN
+                    return self.cal_loss(C_real - C_fake, self.real_label)
+            else:  # SGAN
+                loss_real = self.cal_loss(C_real, self.real_label)
+                loss_fake = self.cal_loss(C_fake, self.fake_label)
+                return (loss_real + loss_fake) * 0.5
+        else:
+            if self.rel:
+                if self.avg:  # RaGAN
+                    loss_fake = self.cal_loss(C_fake - C_real.mean(dim=0),
+                                              self.real_label)
+                    loss_real = self.cal_loss(C_real - C_fake.mean(dim=0),
+                                              self.fake_label)
+                    return (loss_real + loss_fake) * 0.5
+                else:  # RpGAN
+                    return self.cal_loss(C_fake - C_real, self.real_label)
+            else:  # SGAN
+                return self.cal_loss(C_fake, self.real_label)
 
 
 class SoftAdapt(nn.Module):

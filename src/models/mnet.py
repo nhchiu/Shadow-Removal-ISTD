@@ -19,17 +19,17 @@ http://arxiv.org/abs/1908.08628
 import torch
 import torch.nn as nn
 
+from src.models import opt_layers
 from src.models.skip_connection_layer import SkipConnectionLayer
 
 
 class MNet(nn.Module):
 
-    def __init__(self,
-                 in_channels,
-                 out_channels,
+    def __init__(self, in_channels, out_channels,
                  ngf=64,
                  drop_rate=0,
                  no_conv_t=True,
+                 use_selu=False,
                  activation=None, **kwargs):
         super(MNet, self).__init__()
         depth = 4
@@ -64,25 +64,10 @@ class MNet(nn.Module):
             submodule=block,
             drop_rate=0)
 
-        upsample = [
-            nn.Upsample(scale_factor=2, mode='nearest'),
-            nn.Conv2d(in_channels=ngf * 2,
-                      out_channels=out_channels,
-                      kernel_size=3,
-                      stride=1,
-                      padding=1,
-                      padding_mode="reflect",
-                      bias=False)] if no_conv_t else \
-            [nn.ConvTranspose2d(in_channels=ngf * 2,
-                                out_channels=out_channels,
-                                kernel_size=4,
-                                stride=2,
-                                padding=1,
-                                bias=False)]
-        if activation is not None:
-            assert isinstance(activation, nn.Module)
-            upsample.append(activation)
-        self.up_conv = nn.Sequential(*upsample)
+        upsample = opt_layers.get_upsample(no_conv_t, ngf*2, out_channels)
+        if activation != "none":
+            activation_layer = opt_layers.get_activation(activation)
+        self.up_conv = nn.Sequential(upsample, activation_layer)
 
     def forward(self, x):
         x = self.conv(x)
@@ -112,23 +97,7 @@ class _conv_block(nn.Module):
 class _up_block(nn.Module):
     def __init__(self, in_channels, features, no_conv_t=True):
         super().__init__()
-        if no_conv_t:
-            upconv = nn.Sequential(
-                nn.Upsample(scale_factor=2, mode='nearest'),
-                nn.Conv2d(in_channels=in_channels,
-                          out_channels=features,
-                          kernel_size=3,
-                          stride=1,
-                          padding=1,
-                          padding_mode="reflect",
-                          bias=False))
-        else:
-            upconv = nn.ConvTranspose2d(in_channels=in_channels,
-                                        out_channels=features,
-                                        kernel_size=4,
-                                        stride=2,
-                                        padding=1,
-                                        bias=False)
+        upconv = opt_layers.get_upsample(no_conv_t, in_channels, features)
         self.model = nn.Sequential(
             nn.LeakyReLU(negative_slope=0.2, inplace=True),
             upconv,

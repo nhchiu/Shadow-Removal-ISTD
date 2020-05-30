@@ -9,6 +9,7 @@ import torch.nn as nn
 from src.models.denseunet import DenseUNet
 from src.models.mnet import MNet
 from src.models.patchgan import PatchGAN
+from src.models.began import BEGAN
 from src.models.unet import UNet
 
 
@@ -36,19 +37,10 @@ class Generators(Enum):
 @unique
 class Discriminators(Enum):
     PATCHGAN = PatchGAN
-
-
-@unique
-class Activation(Enum):
-    # "none", "sigmoid", "tanh", "htanh"
-    NONE = None
-    SIGMOID = nn.Sigmoid()
-    TANH = nn.Tanh()
-    HTANH = nn.Hardtanh(min_val=-1.0, max_val=1.0, inplace=True)
+    BEGAN = BEGAN
 
 
 def get_generator(key: str, *args, **kwargs):
-    kwargs["activation"] = Activation[kwargs["activation"].upper()].value
     return Generators[key.upper()].value(*args, **kwargs)
 
 

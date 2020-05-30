@@ -38,23 +38,30 @@ class CGAN(object):
             ngf=args.ngf,
             drop_rate=args.droprate,
             no_conv_t=args.NN_upconv,
+            use_selu=args.SELU,
             activation=args.activation,)
         self.G2 = networks.get_generator(
             args.net_G,
             in_channels=3+1,
+            out_channels=3,
             ngf=args.ngf,
             drop_rate=args.droprate,
             no_conv_t=args.NN_upconv,
+            use_selu=args.SELU,
             activation=args.activation,)
         self.D1 = networks.get_discriminator(
             args.net_D,
             in_channels=3+1,
+            out_channels=1,
             ndf=args.ndf,  # n_layers=3,
+            use_selu=args.SELU,
             use_sigmoid=False)
         self.D2 = networks.get_discriminator(
             args.net_D,
             in_channels=3+3+1,
+            out_channels=3,
             ndf=args.ndf,  # n_layers=3,
+            use_selu=args.SELU,
             use_sigmoid=False)
         if "infer" in args.tasks and "train" not in args.tasks:
             assert args.load_weights_g1 is not None
@@ -80,12 +87,6 @@ class CGAN(object):
         self.optim_D = optim.Adam(
             list(self.D1.parameters())+list(self.D2.parameters()),
             lr=args.lr_D, betas=(args.beta1, args.beta2))
-        # self.decay_G = optim.lr_scheduler.ReduceLROnPlateau(
-        #     self.optim_G,
-        #     cooldown=10, min_lr=1e-7, factor=0.8, verbose=True)
-        # self.decay_D = optim.lr_scheduler.ReduceLROnPlateau(
-        #     self.optim_D,
-        #     cooldown=10, min_lr=1e-7, factor=0.8, verbose=True)
         self.decay_G = optim.lr_scheduler.ExponentialLR(
             self.optim_G, gamma=(1-args.decay), last_epoch=-1)
         self.decay_D = optim.lr_scheduler.ExponentialLR(
@@ -103,6 +104,7 @@ class CGAN(object):
                                     root_dir2=data_dir2,
                                     subset="train",
                                     datas=["img", "target", "matte"],
+                                    # mean=(0.5, 0.5, 0.5),std=(0.5, 0.5, 0.5),
                                     transforms=transform.transforms(
                                         # resize=(300, 400),
                                         scale=args.aug_scale,
@@ -114,6 +116,7 @@ class CGAN(object):
                                     root_dir2=data_dir2,
                                     subset="test",
                                     datas=["img", "target", "matte"],
+                                    # mean=(0.5, 0.5, 0.5),std=(0.5, 0.5, 0.5),
                                     # transforms=transform.transforms(
                                     #     resize=(256, 256)),
                                     preload=False,)
@@ -162,6 +165,9 @@ class CGAN(object):
             #         init_weights=[1, self.lambda1, self.lambda2],
             #         beta=0.1, weighted=True, normalized=True)
             #     self.soft_adapt.to(self.device, non_blocking=True)
+            self.began = (args.net_D == "began")
+            self.gamma = 0.7
+            self.lambda_k = 0.001
 
             self.train_logdir = os.path.join(args.logs, "train")
             self.valid_logdir = os.path.join(args.logs, "valid")
@@ -197,6 +203,9 @@ class CGAN(object):
         progress = trange(epochs, desc="epochs", position=0,
                           ncols=80, ascii=True,)
 
+        if self.began:
+            self.k1 = 0
+            self.k2 = 0
         for epoch in progress:
             measures = self.run_epoch()
             if (epoch % self.log_interval == 0):
@@ -211,9 +220,8 @@ class CGAN(object):
                     self.save(self.weights_dir, "best")
                     valid_writer.add_text("best",
                                           f"{epoch}: loss={best_loss}", epoch)
-                    self.logger.info(
-                        f"Improvement after epoch {epoch}, "
-                        f"error = {best_loss:4f}")
+                    self.logger.info(f"Improvement after epoch {epoch}, "
+                                     f"error = {best_loss:4f}")
 
         total_time = datetime.timedelta(seconds=(time.time()-start_time))
         self.logger.info(f"Training time {total_time}")
@@ -265,29 +273,17 @@ class CGAN(object):
                 C2_fake = self.D2(torch.cat((x,
                                              m_pred.detach(),
                                              y_pred.detach()), dim=1))
-                if self.d_loss_type == "normal":
-                    D1_loss_real = self.adv_loss(C1_real, is_real=True)
-                    D1_loss_fake = self.adv_loss(C1_fake, is_real=False)
-                    D1_loss = (D1_loss_fake + D1_loss_real) * 0.5
+                if self.began:
+                    D1_loss_real = self.data_loss(C1_real, m.detach())
+                    D1_loss_fake = self.data_loss(C1_fake, m_pred.detach())
+                    D1_loss = D1_loss_real - self.k1 * D1_loss_fake
 
-                    D2_loss_real = self.adv_loss(C2_real, is_real=True)
-                    D2_loss_fake = self.adv_loss(C2_fake, is_real=False)
-                    D2_loss = (D2_loss_fake + D2_loss_real) * 0.5
-                elif self.d_loss_type == "rel":
-                    D1_loss = self.adv_loss(C1_real-C1_fake, is_real=True)
-                    D2_loss = self.adv_loss(C2_real-C2_fake, is_real=True)
-                else:  # "rel_avg"
-                    D1_loss_real = self.adv_loss(
-                        C1_real - C1_fake.mean(dim=0), is_real=True)
-                    D1_loss_fake = self.adv_loss(
-                        C1_fake - C1_real.mean(dim=0), is_real=False)
-                    D1_loss = (D1_loss_fake + D1_loss_real) * 0.5
-
-                    D2_loss_real = self.adv_loss(
-                        C2_real - C2_fake.mean(dim=0), is_real=True)
-                    D2_loss_fake = self.adv_loss(
-                        C2_fake - C2_real.mean(dim=0), is_real=False)
-                    D2_loss = (D2_loss_fake + D2_loss_real) * 0.5
+                    D2_loss_real = self.data_loss(C2_real, y.detach())
+                    D2_loss_fake = self.data_loss(C2_fake, y_pred.detach())
+                    D2_loss = D2_loss_real - self.k2 * D2_loss_fake
+                else:
+                    D1_loss = self.adv_loss(C1_real, C1_fake, D_loss=True)
+                    D2_loss = self.adv_loss(C2_real, C2_fake, D_loss=True)
 
                 D_loss = self.lambda2 * D1_loss + self.lambda3 * D2_loss
                 if training:
@@ -305,29 +301,17 @@ class CGAN(object):
                 self.D1.requires_grad_(False)
                 self.D2.requires_grad_(False)
                 # Train G with updated discriminator
-                if training:  # D is not updates when validating
+                if training:  # D is not updated when validating
                     C1_real = self.D1(torch.cat((x, m), dim=1))
                     C1_fake = self.D1(torch.cat((x, m_pred), dim=1))
                     C2_real = self.D2(torch.cat((x, m, y), dim=1))
                     C2_fake = self.D2(torch.cat((x, m_pred, y_pred), dim=1))
-                if self.d_loss_type == "normal":
-                    G1_loss = self.adv_loss(C1_fake, is_real=True)
-                    G2_loss = self.adv_loss(C2_fake, is_real=True)
-                elif self.d_loss_type == "rel":
-                    G1_loss = self.adv_loss(C1_fake - C1_real, is_real=True)
-                    G2_loss = self.adv_loss(C2_fake - C2_real, is_real=True)
-                else:  # "rel_avg"
-                    G1_loss_r = self.adv_loss(
-                        C1_fake - C1_real.mean(dim=0), is_real=True)
-                    G1_loss_f = self.adv_loss(
-                        C1_real - C1_fake.mean(dim=0), is_real=False)
-                    G1_loss = (G1_loss_r + G1_loss_f) * 0.5
-
-                    G2_loss_r = self.adv_loss(
-                        C1_fake - C1_real.mean(dim=0), is_real=True)
-                    G2_loss_f = self.adv_loss(
-                        C1_real - C1_fake.mean(dim=0), is_real=False)
-                    G2_loss = (G2_loss_r + G2_loss_f) * 0.5
+                if self.began:
+                    G1_loss = self.data_loss(C1_fake, m_pred.detach())
+                    G2_loss = self.data_loss(C2_fake, y_pred.detach())
+                else:
+                    G1_loss = self.adv_loss(C1_real, C1_fake, D_loss=False)
+                    G2_loss = self.adv_loss(C2_real, C2_fake, D_loss=False)
 
                 data1_loss = self.data_loss(m_pred, m)
                 data2_loss = self.data_loss(y_pred, y)
@@ -349,6 +333,15 @@ class CGAN(object):
                 if training:
                     G_loss.backward()
                     self.optim_G.step()
+                    if self.began:
+                        balance1 = (self.gamma * D1_loss_real.item() -
+                                    D1_loss_fake.item())
+                        self.k1 = np.clip(
+                            self.k1 + self.lambda_k * balance1, 0, 1)
+                        balance2 = (self.gamma * D2_loss_real.item() -
+                                    D2_loss_fake.item())
+                        self.k2 = np.clip(
+                            self.k2 + self.lambda_k * balance2, 0, 1)
 
                 loss["G1"] += G1_loss.item()
                 loss["G2"] += G2_loss.item()
@@ -385,8 +378,6 @@ class CGAN(object):
             data_loader = self.valid_loader
             assert os.path.isdir(os.path.join(self.inferd_dir, "shadowless"))
             assert os.path.isdir(os.path.join(self.inferd_dir, "matte"))
-            # normalization = transform.Normalize(
-            #     ISTDDataset.mean, ISTDDataset.std)
             for (filenames, x, _, _) in tqdm(data_loader,
                                              desc="Processing data",
                                              total=len(data_loader),
@@ -406,8 +397,6 @@ class CGAN(object):
                 y_pred_list.extend([y_pred_np[s].transpose(1, 2, 0)
                                     for s in range(y_pred_np.shape[0])])
 
-                # assert len(input_list) == len(pred_list)
-                # assert len(input_list) == len(filenames)
                 for m_pred, y_pred, name in \
                         zip(m_pred_list, y_pred_list, filenames):
                     # img_pred = cv.resize(

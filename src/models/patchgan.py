@@ -16,19 +16,20 @@ https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix
 # import torch
 import torch.nn as nn
 
+from src.models import opt_layers
+
 
 class PatchGAN(nn.Module):
 
-    def __init__(self,
-                 in_channels,
+    def __init__(self, in_channels,
                  ndf=64,
                  n_layers=3,
+                 use_selu=False,
                  use_sigmoid=False, **kwargs):
         super(PatchGAN, self).__init__()
-        ksize = 4
         sequence = [nn.Conv2d(in_channels=in_channels,
                               out_channels=ndf,
-                              kernel_size=ksize,
+                              kernel_size=4,
                               stride=2,
                               padding=1),
                     nn.LeakyReLU(0.2, inplace=True)]
@@ -36,30 +37,33 @@ class PatchGAN(nn.Module):
         prev_channels = ndf
         for n in range(1, n_layers):  # increasing the number of filters
             if n < 4:
-                sequence.extend(self._block(prev_channels, prev_channels*2))
+                sequence.extend(
+                    self._block(prev_channels, prev_channels*2, use_selu))
                 prev_channels *= 2
                 # (N, ndf*(2**n), H/(2**(n+1)), W/(2**(n+1)))
             else:
-                sequence.extend(self._block(prev_channels, prev_channels))
+                sequence.extend(
+                    self._block(prev_channels, prev_channels, use_selu))
                 # (N, ndf*(2**3), H/(2**(n+1)), W/(2**(n+1)))
 
         out_channels = prev_channels*2 if n_layers < 4 else prev_channels
         sequence.extend([
             nn.Conv2d(in_channels=prev_channels,
                       out_channels=out_channels,
-                      kernel_size=ksize,
+                      kernel_size=3,
                       stride=1,
                       padding=1,
                       padding_mode='reflect',
                       bias=False),
-            nn.BatchNorm2d(num_features=out_channels),
-            nn.LeakyReLU(0.2, inplace=True)])
+            opt_layers.get_norm(use_selu=use_selu, num_features=out_channels)])
+        # nn.BatchNorm2d(num_features=out_channels),
+        # nn.LeakyReLU(0.2, inplace=True)])
         # (N, ndf*(2**min(n_layers, 3)), H/(2**(n_layers)) - 1, W/(2**(n_layers)) - 1)
 
         # squeeze to 1 channel prediction map
         sequence.append(
             nn.Conv2d(out_channels, 1,
-                      kernel_size=ksize, stride=1, padding=1,
+                      kernel_size=3, stride=1, padding=1,
                       padding_mode='reflect', bias=False)
         )
         # (N, ndf*(2**min(n_layers, 3)), H/(2**(n_layers)) - 2, W/(2**(n_layers)) - 2)
@@ -71,16 +75,20 @@ class PatchGAN(nn.Module):
     def forward(self, x):
         return self.model(x)
 
-    def _block(self, in_channels, out_channels=None):
+    def _block(self, in_channels, out_channels=None, use_selu=False):
         """ Conv -> BatchNorm -> LeakyReLU"""
         if out_channels is None:
             out_channels = in_channels * 2
-        return [nn.Conv2d(in_channels=in_channels,
-                          out_channels=out_channels,
-                          kernel_size=4,
-                          stride=2,
-                          padding=1,
-                          padding_mode='reflect',
-                          bias=False),
-                nn.BatchNorm2d(num_features=out_channels),
-                nn.LeakyReLU(negative_slope=0.2, inplace=True)]
+        return [
+            nn.Conv2d(in_channels=in_channels,
+                      out_channels=out_channels,
+                      kernel_size=4,
+                      stride=2,
+                      padding=1,
+                      padding_mode='reflect',
+                      bias=False),
+            opt_layers.get_norm(use_selu=use_selu,
+                                num_features=out_channels)
+        ]
+        # nn.BatchNorm2d(num_features=out_channels),
+        # nn.LeakyReLU(negative_slope=0.2, inplace=True)]

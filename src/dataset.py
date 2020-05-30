@@ -7,6 +7,7 @@ import cv2 as cv
 import numpy as np
 import torch
 import torch.utils.data
+# import torchvision.transforms  # , utils
 
 # import transform
 import src.utils as utils
@@ -24,6 +25,7 @@ class ISTDDataset(torch.utils.data.Dataset):
     def __init__(self, root_dir,
                  subset,
                  datas: list = ["img", "mask", "target"],
+                 #  mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5),
                  transforms=None, preload=False, root_dir2=None):
         """
         Args:
@@ -36,6 +38,7 @@ class ISTDDataset(torch.utils.data.Dataset):
         """
         assert subset in ["train", "test"]
         self.transforms = transforms
+        # self.normalize = torchvision.transforms.Normalize(mean, std)
         img_dir = os.path.join(root_dir, subset, subset + "_A")
         mask_dir = os.path.join(root_dir, subset, subset + "_B")
         matte_dir = os.path.join(root_dir, subset, subset + "_matte")
