@@ -11,8 +11,6 @@ import torch.utils.data
 # import transform
 import src.utils as utils
 
-# from torchvision import transforms, utils
-
 
 class ISTDDataset(torch.utils.data.Dataset):
     """Shadow removal dataset based on ISTD dataset."""
@@ -188,8 +186,8 @@ class ISTDDataset(torch.utils.data.Dataset):
         return_list = [filename]
         # ndarray(H, W, C) to tensor(C, H, W)
         for s in sample_list:
-            return_list.append(torch.as_tensor(s.transpose(2, 0, 1),
-                                               dtype=torch.float32))
+            return_list.append((torch.as_tensor(s.transpose(2, 0, 1),
+                                                dtype=torch.float32)-0.5)*2)
         # image_tensor = torch.as_tensor(image.transpose(2, 0, 1),
         #                                dtype=torch.float32)
         # mask_tensor = torch.as_tensor(mask.transpose(2, 0, 1),

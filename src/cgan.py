@@ -50,10 +50,12 @@ class CGAN(object):
             args.net_D,
             in_channels=3+1,
             ndf=args.ndf,  # n_layers=3,
+            use_sigmoid=False)
         self.D2 = networks.get_discriminator(
             args.net_D,
             in_channels=3+3+1,
             ndf=args.ndf,  # n_layers=3,
+            use_sigmoid=False)
         if "infer" in args.tasks and "train" not in args.tasks:
             assert args.load_weights_g1 is not None
             assert args.load_weights_g2 is not None
@@ -410,14 +412,14 @@ class CGAN(object):
                         zip(m_pred_list, y_pred_list, filenames):
                     # img_pred = cv.resize(
                     #     y_pred, (256, 192), interpolation=cv.INTER_LINEAR)
-                    img_pred = utils.float2uint(y_pred)
+                    img_pred = utils.float2uint(y_pred*0.5+0.5)
                     cv.imwrite(os.path.join(self.inferd_dir,
                                             "shadowless",
                                             name+".png"), img_pred)
 
                     # matte_pred = cv.resize(
                     #     m_pred, (256, 192), interpolation=cv.INTER_LINEAR)
-                    matte_pred = utils.float2uint(m_pred)
+                    matte_pred = utils.float2uint(m_pred*0.5+0.5)
                     cv.imwrite(os.path.join(self.inferd_dir,
                                             "matte",
                                             name+".png"), matte_pred)

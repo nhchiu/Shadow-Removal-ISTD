@@ -51,10 +51,12 @@ class VisualLoss(nn.Module):
         #     torch.tensor(ISTDDataset.std).reshape((3, 1, 1)))
 
     def forward(self, y_pred, y_target):
+        y_pred = y_pred*0.5+0.5
         y_pred_normalized = torch.stack(
-            [self.normalize(y_pred[i]) for i in range(y_pred.size(0))], 0)
+            [self.normalize(y) for y in torch.unbind(y_pred)], 0)
+        y_target = y_target*0.5+0.5
         y_target_normalized = torch.stack(
-            [self.normalize(y_target[i]) for i in range(y_target.size(0))], 0)
+            [self.normalize(y) for y in torch.unbind(y_target)], 0)
         feature_pred = self.VGG(y_pred_normalized)
         with torch.no_grad():
             feature_target = self.VGG(y_target_normalized)
