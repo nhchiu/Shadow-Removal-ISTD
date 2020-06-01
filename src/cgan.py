@@ -13,6 +13,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from torchvision.utils import make_grid
 from tqdm import tqdm, trange
 
 import src.networks as networks
@@ -181,12 +182,11 @@ class CGAN(object):
             self.weights_dir = args.weights
             self.log_interval = args.log_every
             self.valid_interval = args.valid_every
+            self.vis_interval = args.vis_every
         if "infer" in args.tasks:
             self.inferd_dir = args.infered
 
     def train(self, epochs=5000):
-        train_writer = SummaryWriter(self.train_logdir)
-        valid_writer = SummaryWriter(self.valid_logdir)
         # if self.adapt:
         #     train_writer.add_custom_scalars_multilinechart(
         #         ["SoftAdapt/adv",
@@ -207,29 +207,28 @@ class CGAN(object):
             self.k1 = 0
             self.k2 = 0
         for epoch in progress:
-            measures = self.run_epoch()
-            if (epoch % self.log_interval == 0):
-                self.log_scalars(train_writer, measures, epoch)
-                self.save(self.weights_dir, "latest")
+            visualize = (epoch % self.vis_interval == 0)
+            log_scalars = (epoch % self.log_interval == 0)
+            self.run_epoch(visualization=visualize,
+                           log_scalars=log_scalars, epoch=epoch)
 
             if (epoch % self.valid_interval == 0):
-                measures = self.run_epoch(training=False)
-                self.log_scalars(valid_writer, measures, epoch)
-                if measures["Loss"]["total"] < best_loss:
-                    best_loss = measures["Loss"]["total"]
+                loss = self.run_epoch(training=False, epoch=epoch)
+                if loss < best_loss:
+                    best_loss = loss
                     self.save(self.weights_dir, "best")
-                    valid_writer.add_text("best",
-                                          f"{epoch}: loss={best_loss}", epoch)
                     self.logger.info(f"Improvement after epoch {epoch}, "
                                      f"error = {best_loss:4f}")
+                    with SummaryWriter(self.valid_logdir) as writer:
+                        writer.add_text("best",
+                                        f"{epoch}: loss={best_loss}", epoch)
 
         total_time = datetime.timedelta(seconds=(time.time()-start_time))
         self.logger.info(f"Training time {total_time}")
         self.logger.info(f"Best validation loss: {best_loss:.3f}")
-        train_writer.close()
-        valid_writer.close()
 
-    def run_epoch(self, training=True):
+    def run_epoch(self, training=True,
+                  visualization=False, log_scalars=False, epoch=0):
         if training:
             self.G1.train()
             self.G2.train()
@@ -240,14 +239,22 @@ class CGAN(object):
             self.G2.eval()
             self.D1.eval()
             self.D2.eval()
+            # Always log scalars and images when validating
+            log_scalars = True
+            visualization = True
 
-        loss = dict.fromkeys(
-            ["G", "D",
-             "D1", "D2", "G1", "G2",
-             "data1", "data2", "vis1", "vis2"], 0.0)
-        D1_out = dict.fromkeys(["real", "fake", "diff"], 0.0)
-        D2_out = dict.fromkeys(["real", "fake", "diff"], 0.0)
         data_loader = self.train_loader if training else self.valid_loader
+        logdir = self.train_loader if training else self.valid_logdir
+        if visualization:
+            n_images_to_show = 8
+            images_x = []
+            images_m = []
+            images_y = []
+        if log_scalars:
+            loss = dict.fromkeys(["G", "G1", "G2", "D", "D1", "D2",
+                                  "data1", "data2", "vis1", "vis2"], 0.0)
+            D1_out = dict.fromkeys(["real", "fake", "diff"], 0.0)
+            D2_out = dict.fromkeys(["real", "fake", "diff"], 0.0)
         for(_, x, m, y) in tqdm(data_loader,
                                 total=len(data_loader),
                                 desc="train" if training else "valid",
@@ -289,13 +296,15 @@ class CGAN(object):
                 if training:
                     D_loss.backward()
                     self.optim_D.step()
-                D1_out["real"] += C1_real.detach().cpu().numpy().mean()
-                D1_out["fake"] += C1_fake.detach().cpu().numpy().mean()
-                D2_out["real"] += C2_real.detach().cpu().numpy().mean()
-                D2_out["fake"] += C2_fake.detach().cpu().numpy().mean()
-                loss["D1"] += D1_loss.item()
-                loss["D2"] += D2_loss.item()
-                loss["D"] += D_loss.item()
+
+                if log_scalars:
+                    D1_out["real"] += C1_real.detach().cpu().numpy().mean()
+                    D1_out["fake"] += C1_fake.detach().cpu().numpy().mean()
+                    D2_out["real"] += C2_real.detach().cpu().numpy().mean()
+                    D2_out["fake"] += C2_fake.detach().cpu().numpy().mean()
+                    loss["D1"] += D1_loss.item()
+                    loss["D2"] += D2_loss.item()
+                    loss["D"] += D_loss.item()
 
                 self.optim_G.zero_grad()
                 self.D1.requires_grad_(False)
@@ -343,33 +352,63 @@ class CGAN(object):
                         self.k2 = np.clip(
                             self.k2 + self.lambda_k * balance2, 0, 1)
 
-                loss["G1"] += G1_loss.item()
-                loss["G2"] += G2_loss.item()
-                loss["data1"] += data1_loss.item()
-                loss["data2"] += data2_loss.item()
-                loss["vis1"] += vis1_loss.item()
-                loss["vis2"] += vis2_loss.item()
-                loss["G"] += G_loss.item()
+                if log_scalars:
+                    loss["G1"] += G1_loss.item()
+                    loss["G2"] += G2_loss.item()
+                    loss["data1"] += data1_loss.item()
+                    loss["data2"] += data2_loss.item()
+                    loss["vis1"] += vis1_loss.item()
+                    loss["vis2"] += vis2_loss.item()
+                    loss["G"] += G_loss.item()
+
+                if visualization and len(images_x) < n_images_to_show:
+                    with torch.no_grad():
+                        for x, m, y in zip(x.cpu().unbind(),
+                                           m_pred.cpu().unbind(),
+                                           y_pred.cpu().unbind()):
+                            images_x.append(x[(2, 1, 0), ...])
+                            images_m.append(m)
+                            images_y.append(y[(2, 1, 0), ...])
+                            if len(images_x) >= n_images_to_show:
+                                break
+
         if training:
             self.decay_G.step()
             self.decay_D.step()
+
+        if visualization:
+            with SummaryWriter(log_dir=logdir) as writer:
+                grid_x = make_grid(images_x, nrow=4,
+                                   normalize=True, range=(-1, 1))
+                grid_m = make_grid(images_m, nrow=4,
+                                   normalize=True, range=(-1, 1))
+                grid_y = make_grid(images_y, nrow=4,
+                                   normalize=True, range=(-1, 1))
+                writer.add_image("input", grid_x, global_step=epoch)
+                writer.add_image("matte", grid_m, global_step=epoch)
+                writer.add_image("output", grid_y, global_step=epoch)
+
+        if log_scalars:
+            loss["total"] = loss["G"]*0.8 + loss["D"]*0.2
+            D1_out["diff"] = D1_out["real"] - D1_out["fake"]
+            D2_out["diff"] = D2_out["real"] - D2_out["fake"]
+            n_batches = len(data_loader)
+            with SummaryWriter(log_dir=logdir) as writer:
+                for key in loss:
+                    writer.add_scalar(
+                        f"Loss/{key}", loss[key]/n_batches, epoch)
+                for key in D1_out:
+                    writer.add_scalar(
+                        f"D1_output/{key}", D1_out[key]/n_batches, epoch)
+                for key in D2_out:
+                    writer.add_scalar(
+                        f"D2_output/{key}", D2_out[key]/n_batches, epoch)
+            self.save(self.weights_dir, "latest")
+            # softadapt_weights = self.soft_adapt.get_weights()
+            # if self.adapt else {}
+
         torch.cuda.empty_cache()
-        # return metrics
-        n_batches = len(data_loader)
-        for key in loss:
-            loss[key] /= n_batches
-        for key in D1_out:
-            D1_out[key] /= n_batches
-        for key in D2_out:
-            D2_out[key] /= n_batches
-        loss["total"] = loss["G"]*0.8 + loss["D"]*0.2
-        D1_out["diff"] = D1_out["real"] - D1_out["fake"]
-        D2_out["diff"] = D2_out["real"] - D2_out["fake"]
-        # softadapt_weights = self.soft_adapt.get_weights()
-        # if self.adapt else {}
-        return {"Loss": loss,
-                "D1_out": D1_out,
-                "D2_out": D2_out}
+        return loss["total"] if not training else None
 
     def infer(self,):
         with torch.no_grad():
@@ -416,11 +455,6 @@ class CGAN(object):
                     #     np.save(os.path.join(
                     #         self.inferd_dir+"sp", name), sp_pred)
         return
-
-    def log_scalars(self, writer, measures: dict, epoch: int):
-        for m in measures:
-            for k, v in measures[m].items():
-                writer.add_scalar(f"{m}/{k}", v, epoch)
 
     def save(self, weights=None, suffix="latest"):
         module_G1 = self.G1.module if isinstance(self.G1, nn.DataParallel) \

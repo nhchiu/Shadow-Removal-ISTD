@@ -264,6 +264,10 @@ if __name__ == "__main__":
         help="validation interval (default: %(default)d)",
         default=10, type=int,)
     parser.add_argument(
+        "--vis-every",
+        help="visualize images to tensorboard (default: %(default)d)",
+        default=50, type=int,)
+    parser.add_argument(
         "--weights",
         help="folder to save weights (default: %(default)s)",
         default="./weights",)
