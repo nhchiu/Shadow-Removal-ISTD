@@ -11,7 +11,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
+from torch.utils.data import ConcatDataset, DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torchvision.utils import make_grid
 from tqdm import tqdm, trange
@@ -95,32 +95,30 @@ class CGAN(object):
 
         # data loaders
         self.logger.info("Creating data loaders")
-        assert os.path.isdir(args.data_dir)
-        if args.data_dir2:
-            assert os.path.isdir(args.data_dir2)
-            data_dir2 = args.data_dir2
-        else:
-            data_dir2 = None
-        train_dataset = ISTDDataset(args.data_dir,
-                                    root_dir2=data_dir2,
-                                    subset="train",
-                                    datas=["img", "target", "matte"],
-                                    # mean=(0.5, 0.5, 0.5),std=(0.5, 0.5, 0.5),
-                                    transforms=transform.transforms(
-                                        # resize=(300, 400),
-                                        scale=args.aug_scale,
-                                        angle=args.aug_angle,
-                                        flip_prob=0.5,
-                                        crop_size=args.image_size),
-                                    preload=False)
-        valid_dataset = ISTDDataset(args.data_dir,
-                                    root_dir2=data_dir2,
-                                    subset="test",
-                                    datas=["img", "target", "matte"],
-                                    # mean=(0.5, 0.5, 0.5),std=(0.5, 0.5, 0.5),
-                                    # transforms=transform.transforms(
-                                    #     resize=(256, 256)),
-                                    preload=False,)
+        train_sets = []
+        valid_sets = []
+        for directory in args.data_dir:
+            assert os.path.isdir(directory)
+            train_sets.append(ISTDDataset(directory,
+                                          subset="train",
+                                          datas=["img", "target", "matte"],
+                                          transforms=transform.transforms(
+                                              # resize=(300, 400),
+                                              scale=args.aug_scale,
+                                              angle=args.aug_angle,
+                                              flip_prob=0.5,
+                                              crop_size=args.image_size),
+                                          preload=False,
+                                          name=os.path.basename(directory)))
+            valid_sets.append(ISTDDataset(directory,
+                                          subset="test",
+                                          datas=["img", "target", "matte"],
+                                          # transforms=transform.transforms(
+                                          #     resize=(256, 256)),
+                                          preload=False,
+                                          name=os.path.basename(directory)))
+        train_dataset = ConcatDataset(train_sets)
+        valid_dataset = ConcatDataset(valid_sets)
 
         def worker_init(id):
             return np.random.seed(42+id)
@@ -415,8 +413,9 @@ class CGAN(object):
             self.G1.eval()
             self.G2.eval()
             data_loader = self.valid_loader
-            assert os.path.isdir(os.path.join(self.inferd_dir, "shadowless"))
-            assert os.path.isdir(os.path.join(self.inferd_dir, "matte"))
+            for r in ["shadowless", "matte"]:
+                for s in self.valid_loader.dataset.datasets:
+                    os.makedirs(os.path.join(self.inferd_dir, r, s.name))
             for (filenames, x, _, _) in tqdm(data_loader,
                                              desc="Processing data",
                                              total=len(data_loader),
@@ -441,16 +440,14 @@ class CGAN(object):
                     # img_pred = cv.resize(
                     #     y_pred, (256, 192), interpolation=cv.INTER_LINEAR)
                     img_pred = utils.float2uint(y_pred*0.5+0.5)
-                    cv.imwrite(os.path.join(self.inferd_dir,
-                                            "shadowless",
-                                            name+".png"), img_pred)
+                    cv.imwrite(os.path.join(
+                        self.inferd_dir, "shadowless", name+".png"), img_pred)
 
                     # matte_pred = cv.resize(
                     #     m_pred, (256, 192), interpolation=cv.INTER_LINEAR)
                     matte_pred = utils.float2uint(m_pred*0.5+0.5)
-                    cv.imwrite(os.path.join(self.inferd_dir,
-                                            "matte",
-                                            name+".png"), matte_pred)
+                    cv.imwrite(os.path.join(
+                        self.inferd_dir, "matte", name+".png"), matte_pred)
                     # if save_sp:
                     #     np.save(os.path.join(
                     #         self.inferd_dir+"sp", name), sp_pred)

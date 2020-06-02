@@ -26,7 +26,7 @@ class ISTDDataset(torch.utils.data.Dataset):
                  subset,
                  datas: list = ["img", "mask", "target"],
                  #  mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5),
-                 transforms=None, preload=False, root_dir2=None):
+                 transforms=None, preload=False, name=None):
         """
         Args:
             root_dir (string): Directory with all the images.
@@ -37,6 +37,7 @@ class ISTDDataset(torch.utils.data.Dataset):
                 a list of {img, mask, target, matte}.
         """
         assert subset in ["train", "test"]
+        self.name = name
         self.transforms = transforms
         # self.normalize = torchvision.transforms.Normalize(mean, std)
         img_dir = os.path.join(root_dir, subset, subset + "_A")
@@ -88,49 +89,6 @@ class ISTDDataset(torch.utils.data.Dataset):
                                 for f in matte_files]
             self.target_files = [os.path.join(target_dir, f)
                                  for f in target_files]
-        if root_dir2 is not None:
-            img_dir = os.path.join(root_dir2, subset, subset + "_A")
-            mask_dir = os.path.join(root_dir2, subset, subset + "_B")
-            matte_dir = os.path.join(root_dir2, subset, subset + "_matte")
-            target_dir = os.path.join(root_dir2, subset, subset + "_C_fixed")
-            # list all images and targets,
-            # sorting them without the suffix to ensure that they are aligned
-            img_files = sorted(os.listdir(img_dir),
-                               key=lambda f: os.path.splitext(f)[0])
-            mask_files = sorted(os.listdir(mask_dir),
-                                key=lambda f: os.path.splitext(f)[0])
-            matte_files = sorted(os.listdir(matte_dir),
-                                 key=lambda f: os.path.splitext(f)[0])
-            target_files = sorted(os.listdir(target_dir),
-                                  key=lambda f: os.path.splitext(f)[0])
-            if "mask" in datas:
-                assert(len(img_files) == len((mask_files)))
-            if "matte" in datas:
-                assert(len(img_files) == len((matte_files)))
-            if "target" in datas:
-                assert(len(img_files) == len((target_files)))
-            if self.preload:
-                if "img" in datas:
-                    self.datas["img"] += [cv.imread(os.path.join(
-                        img_dir, f), cv.IMREAD_COLOR) for f in img_files]
-                if "mask" in datas:
-                    self.datas["mask"] += [cv.imread(os.path.join(
-                        mask_dir, f), cv.IMREAD_GRAYSCALE) for f in mask_files]
-                if "matte" in datas:
-                    self.datas["matte"] += [cv.imread(os.path.join(
-                        matte_dir, f), cv.IMREAD_GRAYSCALE)
-                        for f in matte_files]
-                if "target" in datas:
-                    self.datas["target"] += [cv.imread(os.path.join(
-                        target_dir, f), cv.IMREAD_COLOR) for f in target_files]
-            else:
-                self.img_files += [os.path.join(img_dir, f) for f in img_files]
-                self.mask_files += [os.path.join(mask_dir, f)
-                                    for f in mask_files]
-                self.matte_files += [os.path.join(matte_dir, f)
-                                     for f in matte_files]
-                self.target_files += [os.path.join(target_dir, f)
-                                      for f in target_files]
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
@@ -186,6 +144,8 @@ class ISTDDataset(torch.utils.data.Dataset):
         #     sample["matte"] = sample["matte"][:, :, np.newaxis]
 
         filename = os.path.splitext(os.path.basename(self.img_files[idx]))[0]
+        if self.name is not None:
+            filename = os.path.join(self.name, filename)
         return_list = [filename]
         # ndarray(H, W, C) to tensor(C, H, W)
         for s in sample_list:

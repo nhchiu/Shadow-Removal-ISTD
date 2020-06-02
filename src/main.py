@@ -95,8 +95,6 @@ def makedirs(args):
         os.makedirs(args.weights, exist_ok=True)
     if "infer" in args.tasks:
         os.makedirs(args.infered, exist_ok=True)
-        os.makedirs(os.path.join(args.infered, "shadowless"), exist_ok=True)
-        os.makedirs(os.path.join(args.infered, "matte"), exist_ok=True)
 
 
 def snapshotargs(args, filename="args.json"):
@@ -132,11 +130,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--data-dir",
         help="root folder with images (default: %(default)s)",
-        default="", )
-    parser.add_argument(
-        "--data-dir2",
-        help="root folder with images (default: %(default)s)",
-        default="", )
+        default=[""], type=str, nargs='+',)
     parser.add_argument(
         "--workers",
         help="number of workers for data loading (default: %(default)d)",
