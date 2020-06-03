@@ -406,7 +406,7 @@ class CGAN(object):
             # if self.adapt else {}
 
         torch.cuda.empty_cache()
-        return loss["total"] if not training else None
+        return loss["total"]/len(data_loader) if not training else None
 
     def infer(self,):
         with torch.no_grad():
