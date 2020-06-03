@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import random
+import re
 import time
 
 import numpy as np
@@ -118,7 +119,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--devices",
         help="device for training (default: %(default)s)",
-        default=["cuda"], type=str, nargs='+',)
+        default=["cuda"], type=lambda s: re.split(', *| +', s),)
     parser.add_argument(
         "--batch-size",
         help="input batch size for training (default: %(default)d)",
@@ -130,7 +131,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--data-dir",
         help="root folder with images (default: %(default)s)",
-        default=[""], type=str, nargs='+',)
+        default=[], type=lambda s: re.split(', *| +', s),)
     parser.add_argument(
         "--workers",
         help="number of workers for data loading (default: %(default)d)",
