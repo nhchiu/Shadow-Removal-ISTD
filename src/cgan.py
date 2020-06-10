@@ -242,7 +242,7 @@ class CGAN(object):
             visualization = True
 
         data_loader = self.train_loader if training else self.valid_loader
-        logdir = self.train_loader if training else self.valid_logdir
+        logdir = self.train_logdir if training else self.valid_logdir
         if visualization:
             n_images_to_show = 8
             images_x = []
