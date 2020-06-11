@@ -221,7 +221,7 @@ class STCGAN(object):
                 C1_fake = self.D1(torch.cat((x, m_pred.detach()), dim=1))
 
                 C2_real = self.D2(torch.cat((x, m, y), dim=1))
-                y_pred = self.G2(torch.cat((x, m), dim=1))
+                y_pred = self.G2(torch.cat((x, m_pred), dim=1))
                 C2_fake = self.D2(torch.cat((x,
                                              m_pred.detach(),
                                              y_pred.detach()), dim=1))
