@@ -98,7 +98,7 @@ class CGAN(object):
         train_sets = []
         valid_sets = []
         for directory in args.data_dir:
-            assert os.path.isdir(directory)
+            assert os.path.isdir(directory), f"{directory} is not a directory"
             train_sets.append(ISTDDataset(directory,
                                           subset="train",
                                           datas=["img", "target", "matte"],
@@ -415,7 +415,8 @@ class CGAN(object):
             data_loader = self.valid_loader
             for r in ["shadowless", "matte"]:
                 for s in self.valid_loader.dataset.datasets:
-                    os.makedirs(os.path.join(self.inferd_dir, r, s.name))
+                    os.makedirs(os.path.join(self.inferd_dir, r, s.name),
+                                exist_ok=True)
             for (filenames, x, _, _) in tqdm(data_loader,
                                              desc="Processing data",
                                              total=len(data_loader),

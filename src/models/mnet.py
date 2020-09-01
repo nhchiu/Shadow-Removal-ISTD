@@ -65,9 +65,11 @@ class MNet(nn.Module):
             drop_rate=0)
 
         upsample = opt_layers.get_upsample(no_conv_t, ngf*2, out_channels)
-        if activation != "none":
+        if (activation is not None) and (activation != "none"):
             activation_layer = opt_layers.get_activation(activation)
-        self.up_conv = nn.Sequential(upsample, activation_layer)
+            self.up_conv = nn.Sequential(upsample, activation_layer)
+        else:
+            self.up_conv = upsample
 
     def forward(self, x):
         x = self.conv(x)

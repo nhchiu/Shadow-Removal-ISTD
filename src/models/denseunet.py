@@ -60,7 +60,7 @@ class DenseUNet(nn.Module):
                              bias=False)
 
         sequence = [in_conv, block, out_conv]
-        if activation is not None:
+        if (activation is not None) and (activation != "none"):
             assert isinstance(activation, nn.Module)
             sequence.append(activation)
 
@@ -111,7 +111,7 @@ class DenseUNet(nn.Module):
     @staticmethod
     def _bottleneck(in_channels, layers=8, growth_rate=8):
         return DenseUNet._dense_block(
-            in_channels, layers=layers, growth_rate=growth_rate)
+            in_channels, layers=layers, growth_rate=growth_rate, drop_rate=0)
 
     class _dense_block(nn.Module):
         def __init__(self, in_channels, layers=4,

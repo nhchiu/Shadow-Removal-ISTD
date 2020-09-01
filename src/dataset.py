@@ -149,8 +149,8 @@ class ISTDDataset(torch.utils.data.Dataset):
         return_list = [filename]
         # ndarray(H, W, C) to tensor(C, H, W)
         for s in sample_list:
-            return_list.append((torch.as_tensor(s.transpose(2, 0, 1),
-                                                dtype=torch.float32)-0.5)*2)
+            return_list.append(torch.as_tensor((s.transpose(2, 0, 1)-0.5)*2,
+                                               dtype=torch.float32))
         # image_tensor = torch.as_tensor(image.transpose(2, 0, 1),
         #                                dtype=torch.float32)
         # mask_tensor = torch.as_tensor(mask.transpose(2, 0, 1),

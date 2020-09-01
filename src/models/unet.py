@@ -54,7 +54,7 @@ class UNet(nn.Module):
                               kernel_size=1,
                               stride=1,
                               bias=False)]
-        if activation != "none":
+        if (activation is not None) and (activation != "none"):
             sequence.append(opt_layers.get_activation(activation))
 
         self.model = nn.Sequential(*sequence)

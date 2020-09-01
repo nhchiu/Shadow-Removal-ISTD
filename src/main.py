@@ -247,9 +247,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--activation", help="Activation functin of G",
         default="tanh", choices=["none", "sigmoid", "tanh", "htanh"])
-    parser.add_argument(
-        "--jointly", help="Train NN jointly or seperately.",
-        type=str2bool, default=True, const=True, nargs='?')
+    # parser.add_argument(
+    #     "--jointly", help="Train NN jointly or seperately.",
+    #     type=str2bool, default=True, const=True, nargs='?')
     parser.add_argument(
         "--log-every",
         help="log interval to tensorboard (default: %(default)d)",

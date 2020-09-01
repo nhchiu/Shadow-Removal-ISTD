@@ -37,8 +37,8 @@ class VisualLoss(nn.Module):
         super().__init__()
         self.reduction = reduction
         self.norm = norm
-        VGG19 = models.vgg19_bn(pretrained=True, progress=False).eval()
-        self.VGG = VGG19.features[:40].requires_grad_(False)
+        VGG19 = models.vgg19_bn(pretrained=True, progress=False)
+        self.VGG = VGG19.features[:40].requires_grad_(False).eval()
         self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                               std=[0.229, 0.224, 0.225])
 

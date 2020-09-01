@@ -6,6 +6,7 @@ from enum import Enum, unique
 import torch
 import torch.nn as nn
 
+from src.models.began import BEGAN
 from src.models.denseunet import DenseUNet
 from src.models.mnet import MNet
 from src.models.patchgan import PatchGAN
