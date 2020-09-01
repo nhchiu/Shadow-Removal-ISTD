@@ -3,7 +3,7 @@
     train:
       plugins: [cpu, gpu, memory]
       main: src.main
-      label: ${tasks}_${D-loss-fn}_${D-loss-type}_${net-D}-${net-G}
+      label: ${tasks}_${D-loss-fn}_${D-type}_${net-D}-${net-G}
       sourcecode:
         select:
           - "src/*"
@@ -40,6 +40,12 @@
         weights: ./weights
         workers: 4
         # SELU: true
+        load-args:
+        lambda1:
+        lambda2:
+        lambda3:
+        lambda4:
+        lambda5:
       output-scalars: off
       # requires:
       #   - dataset
@@ -78,8 +84,8 @@
   operations:
     train:
       plugins: [cpu, gpu, memory]
-      main: STCGAN/main
-      label: ${tasks}_${D-loss-fn}_${D-loss-type}
+      main: STCGAN.main
+      label: ${tasks}_${D-loss-fn}_${D-type}
       sourcecode:
         select:
           - "STCGAN/*"
@@ -89,22 +95,18 @@
         D-loss-fn:
           default: leastsquare
           choices: [standard, leastsquare]
-        D-loss-type:
+        D-type:
           default: rel_avg
           choices: [normal, rel, rel_avg]
         # NN-upconv: yes
-        batch-size: 8
+        batch-size: 4
         beta1: 0.5
         beta2: 0.999
-        data-dir: ./ISTD_DATASET
-        decay: 5.0e-05
+        data-dir: /home/nathan/ISTD
+        decay:
         devices: cuda
         epochs: 2000
         logs: ./logs
-        load-weights-g1:
-        load-weights-g2:
-        load-weights-d1:
-        load-weights-d2:
         lr-D:
           default:
           type: float
@@ -119,7 +121,7 @@
       #   - dataset
 
     infer:
-      main: STCGAN/main
+      main: STCGAN.main
       label: ${tasks}
       plugins: [cpu, gpu, memory]
       sourcecode:
@@ -130,7 +132,7 @@
         tasks: infer
         # NN-upconv: yes
         batch-size: 2
-        data-dir: ./ISTD_DATASET
+        data-dir: /home/nathan/ISTD
         devices: cuda
         infered: ./infered
         load-weights-g1:
