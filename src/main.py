@@ -153,11 +153,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--net-G",
         help="the generator model (default: %(default)s)",
-        default="mnet", choices=["unet", "mnet", "denseunet"])
+        default="mnet", choices=["unet", "mnet", "denseunet", "stcgan"])
     parser.add_argument(
         "--net-D",
         help="the discriminator model (default: %(default)s)",
-        default="patchgan", choices=["patchgan", "began"])
+        default="patchgan", choices=["patchgan", "began", "stcgan", "dummy"])
     parser.add_argument(
         "--ngf",
         help=("initial number of features in G (default: %(default)d)"),
