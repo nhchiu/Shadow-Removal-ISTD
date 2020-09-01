@@ -11,6 +11,7 @@ from src.models.mnet import MNet
 from src.models.patchgan import PatchGAN
 from src.models.began import BEGAN
 from src.models.unet import UNet
+from src.models.dummy import DummyNet
 
 
 @torch.no_grad()
@@ -38,6 +39,7 @@ class Generators(Enum):
 class Discriminators(Enum):
     PATCHGAN = PatchGAN
     BEGAN = BEGAN
+    DUMMY = DummyNet
 
 
 def get_generator(key: str, *args, **kwargs):
