@@ -152,11 +152,14 @@ class CGAN(object):
             self.data_loss = DataLoss().to(self.device)
             self.visual_loss = VisualLoss().to(self.device)
             # data1 loss = 1
-            self.lambda1 = 5     # data2 loss
-            self.lambda2 = 0.5   # CGAN1 loss
-            self.lambda3 = 0.5   # CGAN2 loss
-            self.lambda4 = 5     # Vis1 loss
-            self.lambda5 = 50    # Vis2 loss
+            self.lambda1 = args.lambda1   # data2 loss
+            self.lambda2 = args.lambda2   # CGAN1 loss
+            self.lambda3 = args.lambda3   # CGAN2 loss
+            self.lambda4 = args.lambda4   # Vis1 loss
+            self.lambda5 = args.lambda5   # Vis2 loss
+            if args.net_D == "dummy":
+                self.lambda2 = 0
+                self.lambda3 = 0
             self.adapt = args.softadapt
             # if self.adapt:
             #     self.soft_adapt = SoftAdapt(
@@ -181,6 +184,8 @@ class CGAN(object):
             self.log_interval = args.log_every
             self.valid_interval = args.valid_every
             self.vis_interval = args.vis_every
+            self.save_interval = args.save_every
+            self.start_epoch = 0
         if "infer" in args.tasks:
             self.inferd_dir = args.infered
 
@@ -198,8 +203,10 @@ class CGAN(object):
         self.logger.info("Start training")
         best_loss = 100000.0
         start_time = time.time()
-        progress = trange(epochs, desc="epochs", position=0,
-                          ncols=80, ascii=True,)
+        progress = trange(self.start_epoch, epochs, desc="epochs", position=0,
+                          ncols=80, ascii=True,
+                          total=epochs,
+                          initial=self.start_epoch)
 
         if self.began:
             self.k1 = 0
@@ -214,12 +221,14 @@ class CGAN(object):
                 loss = self.run_epoch(training=False, epoch=epoch)
                 if loss < best_loss:
                     best_loss = loss
-                    self.save(self.weights_dir, "best")
+                    self.save_model(self.weights_dir, "best")
                     self.logger.info(f"Improvement after epoch {epoch}, "
                                      f"error = {best_loss:4f}")
                     with SummaryWriter(self.valid_logdir) as writer:
                         writer.add_text("best",
                                         f"{epoch}: loss={best_loss}", epoch)
+            if (epoch % self.save_interval):
+                self.save(epoch=epoch)
 
         total_time = datetime.timedelta(seconds=(time.time()-start_time))
         self.logger.info(f"Training time {total_time}")
@@ -401,7 +410,7 @@ class CGAN(object):
                 for key in D2_out:
                     writer.add_scalar(
                         f"D2_output/{key}", D2_out[key]/n_batches, epoch)
-            self.save(self.weights_dir, "latest")
+            self.save_model(self.weights_dir, "latest")
             # softadapt_weights = self.soft_adapt.get_weights()
             # if self.adapt else {}
 
@@ -429,8 +438,8 @@ class CGAN(object):
                 y_pred = self.G2(torch.cat((x, m_pred), dim=1))
 
                 # x_np = x.detach().cpu().numpy()
-                m_pred_np = m_pred.detach().cpu().numpy()
-                y_pred_np = y_pred.detach().cpu().numpy()
+                m_pred_np = m_pred.detach().cpu().numpy()*0.5+0.5
+                y_pred_np = y_pred.detach().cpu().numpy()*0.5+0.5
                 m_pred_list.extend([m_pred_np[s].transpose(1, 2, 0)
                                     for s in range(m_pred_np.shape[0])])
                 y_pred_list.extend([y_pred_np[s].transpose(1, 2, 0)
@@ -440,13 +449,13 @@ class CGAN(object):
                         zip(m_pred_list, y_pred_list, filenames):
                     # img_pred = cv.resize(
                     #     y_pred, (256, 192), interpolation=cv.INTER_LINEAR)
-                    img_pred = utils.float2uint(y_pred*0.5+0.5)
+                    img_pred = utils.float2uint(y_pred)
                     cv.imwrite(os.path.join(
                         self.inferd_dir, "shadowless", name+".png"), img_pred)
 
                     # matte_pred = cv.resize(
                     #     m_pred, (256, 192), interpolation=cv.INTER_LINEAR)
-                    matte_pred = utils.float2uint(m_pred*0.5+0.5)
+                    matte_pred = utils.float2uint(m_pred)
                     cv.imwrite(os.path.join(
                         self.inferd_dir, "matte", name+".png"), matte_pred)
                     # if save_sp:
@@ -454,7 +463,7 @@ class CGAN(object):
                     #         self.inferd_dir+"sp", name), sp_pred)
         return
 
-    def save(self, weights=None, suffix="latest"):
+    def save_model(self, weights=None, suffix="latest"):
         module_G1 = self.G1.module if isinstance(self.G1, nn.DataParallel) \
             else self.G1
         module_G2 = self.G2.module if isinstance(self.G2, nn.DataParallel) \
@@ -477,6 +486,41 @@ class CGAN(object):
                    os.path.join(weights, f"D1_{D1_name}_{suffix}.pt"))
         torch.save(module_D2.state_dict(),
                    os.path.join(weights, f"D2_{D2_name}_{suffix}.pt"))
+
+    def save(self, epoch):
+        module_G1 = self.G1.module if isinstance(self.G1, nn.DataParallel) \
+            else self.G1
+        module_G2 = self.G2.module if isinstance(self.G2, nn.DataParallel) \
+            else self.G2
+        module_D1 = self.D1.module if isinstance(self.D1, nn.DataParallel) \
+            else self.D1
+        module_D2 = self.D2.module if isinstance(self.D2, nn.DataParallel) \
+            else self.D2
+        torch.save({
+            "epoch": epoch,
+            "G1": module_G1.state_dict(),
+            "G2": module_G2.state_dict(),
+            "D1": module_D1.state_dict(),
+            "D2": module_D2.state_dict(),
+            "optim_G": self.optim_G.state_dict(),
+            "optim_D": self.optim_D.state_dict(),
+            "decay_G": self.decay_G.state_dict(),
+            "decay_D": self.decay_D.state_dict()
+        }, "./checkpoint.tar")
+
+    def load(self, path="./checkpoint.tar"):
+        self.logger.info(f"Loading checkpoint from {path}")
+        checkpoint = torch.load(path)
+        self.start_epoch = checkpoint["epoch"]
+        self.G1.load_state_dict(checkpoint["G1"])
+        self.G2.load_state_dict(checkpoint["G2"])
+        self.D1.load_state_dict(checkpoint["D1"])
+        self.D2.load_state_dict(checkpoint["D2"])
+        self.optim_G.load_state_dict(checkpoint["optim_G"])
+        self.optim_D.load_state_dict(checkpoint["optim_D"])
+        self.decay_D.load_state_dict(checkpoint["decay_D"])
+        self.decay_D.load_state_dict(checkpoint["decay_D"])
+        self.logger.info("Checkpoint loaded.")
 
     def init_weight(self, g1_weights=None, g2_weights=None,
                     d1_weights=None, d2_weights=None):

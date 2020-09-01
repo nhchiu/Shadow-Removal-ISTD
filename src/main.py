@@ -22,7 +22,22 @@ from src.cgan import CGAN
 def main(args):
     time_str = time.strftime("%Y%m%d-%H%M%S")
     makedirs(args)
-    snapshotargs(args, filename=f"args-{time_str}.json")
+    snapshotargs(args, filename="args.json")
+    if args.load_args is not None:
+        with open(args.load_args, "r") as f:
+            arg_dict = json.load(f)
+        preserved_args = [
+            "load_args"
+            "load_checkpoint",
+            "load_weights_g1",
+            "load_weights_g2",
+            "load_weights_d1",
+            "load_weights_d2",
+            "weights", "logs"]
+        for k in preserved_args:
+            if k in arg_dict:
+                arg_dict.pop(k)
+        args.__dict__.update(arg_dict)
 
     # use CuDNN backend
     torch.backends.cudnn.enabled = True
@@ -38,6 +53,11 @@ def main(args):
     logger.info(args)
 
     net = CGAN(args)
+    if args.load_checkpoint is not None:
+        if not os.path.isfile(args.load_checkpoint):
+            print(f"{args.load_checkpoint} is not a file")
+        else:
+            net.load(path=args.load_checkpoint)
 
     if "train" in args.tasks:
         net.train(args.epochs)
@@ -194,6 +214,26 @@ if __name__ == "__main__":
         help="Adam betas[1] (default: %(default).4f) ",
         default=0.999, type=float)
     parser.add_argument(
+        "--lambda1",
+        help="data2 loss coeficient (default: %(default).4f) ",
+        default=5, type=float)
+    parser.add_argument(
+        "--lambda2",
+        help="GAN1 loss coeficient (default: %(default).4f) ",
+        default=0.5, type=float)
+    parser.add_argument(
+        "--lambda3",
+        help="GAN2 loss coeficient (default: %(default).4f) ",
+        default=0.5, type=float)
+    parser.add_argument(
+        "--lambda4",
+        help="visual1 loss coeficient (default: %(default).4f) ",
+        default=5, type=float)
+    parser.add_argument(
+        "--lambda5",
+        help="visual2 coeficient (default: %(default).4f) ",
+        default=50, type=float)
+    parser.add_argument(
         "--manual_seed",
         help="manual random seed (default: %(default)s)",
         default=38107943, type=int)
@@ -212,6 +252,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--load-weights-d2",
         help="load weights to continue training (default: %(default)s)",
+        default=None)
+    parser.add_argument(
+        "--load-args",
+        help="load args from previous runs (default: %(default)s)",
+        default=None)
+    parser.add_argument(
+        "--load-checkpoint",
+        help="load checkpoint to continue training (default: %(default)s)",
         default=None)
     parser.add_argument(
         "--D-loss-fn",
@@ -261,6 +309,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--vis-every",
         help="visualize images to tensorboard (default: %(default)d)",
+        default=50, type=int,)
+    parser.add_argument(
+        "--save-every",
+        help="save checkpoints (default: %(default)d)",
         default=50, type=int,)
     parser.add_argument(
         "--weights",
